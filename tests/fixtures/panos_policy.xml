@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config version="10.2.0">
+  <devices>
+    <entry name="localhost.localdomain">
+      <vsys>
+        <entry name="vsys1">
+
+          <!-- ============================================================
+               Address Objects
+               ============================================================ -->
+          <address>
+            <entry name="web-servers">
+              <ip-netmask>10.1.1.0/24</ip-netmask>
+              <description>Web server subnet in DMZ</description>
+            </entry>
+            <entry name="db-servers">
+              <ip-netmask>10.2.1.0/24</ip-netmask>
+              <description>Database server subnet</description>
+            </entry>
+            <entry name="app-servers">
+              <ip-netmask>10.3.1.0/24</ip-netmask>
+              <description>Application server subnet</description>
+            </entry>
+            <entry name="management">
+              <ip-netmask>10.0.0.0/24</ip-netmask>
+              <description>Management network</description>
+            </entry>
+          </address>
+
+          <!-- ============================================================
+               Address Groups
+               ============================================================ -->
+          <address-group>
+            <entry name="all-servers">
+              <static>
+                <member>web-servers</member>
+                <member>db-servers</member>
+                <member>app-servers</member>
+              </static>
+              <description>All production server subnets</description>
+            </entry>
+            <entry name="production">
+              <static>
+                <member>all-servers</member>
+              </static>
+              <description>Production environment (references all-servers group)</description>
+            </entry>
+          </address-group>
+
+          <!-- ============================================================
+               Service Objects
+               ============================================================ -->
+          <service>
+            <entry name="http">
+              <protocol>
+                <tcp>
+                  <port>80</port>
+                </tcp>
+              </protocol>
+            </entry>
+            <entry name="https">
+              <protocol>
+                <tcp>
+                  <port>443</port>
+                </tcp>
+              </protocol>
+            </entry>
+            <entry name="ssh">
+              <protocol>
+                <tcp>
+                  <port>22</port>
+                </tcp>
+              </protocol>
+            </entry>
+            <entry name="mysql">
+              <protocol>
+                <tcp>
+                  <port>3306</port>
+                </tcp>
+              </protocol>
+            </entry>
+            <entry name="app-svc">
+              <protocol>
+                <tcp>
+                  <port>8080-8089</port>
+                </tcp>
+              </protocol>
+            </entry>
+          </service>
+
+          <!-- ============================================================
+               Service Groups
+               ============================================================ -->
+          <service-group>
+            <entry name="web-services">
+              <members>
+                <member>http</member>
+                <member>https</member>
+              </members>
+            </entry>
+            <entry name="management-services">
+              <members>
+                <member>ssh</member>
+              </members>
+            </entry>
+          </service-group>
+
+          <!-- ============================================================
+               Security Rules
+               ============================================================ -->
+          <rulebase>
+            <security>
+              <rules>
+
+                <!-- Rule 1: Allow HTTP/HTTPS from trust to DMZ web servers -->
+                <entry name="allow-web-traffic">
+                  <from><member>trust</member></from>
+                  <to><member>dmz</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>web-servers</member></destination>
+                  <service><member>web-services</member></service>
+                  <application><member>any</member></application>
+                  <action>allow</action>
+                  <description>Allow HTTP and HTTPS traffic to web server subnet</description>
+                  <log-end>yes</log-end>
+                </entry>
+
+                <!-- Rule 2: Allow DB access only from app-servers -->
+                <entry name="allow-db-access">
+                  <from><member>dmz</member></from>
+                  <to><member>trust</member></to>
+                  <source><member>app-servers</member></source>
+                  <destination><member>db-servers</member></destination>
+                  <service><member>mysql</member></service>
+                  <application><member>any</member></application>
+                  <action>allow</action>
+                  <description>Allow MySQL access from app servers to DB servers</description>
+                  <log-end>yes</log-end>
+                </entry>
+
+                <!-- Rule 3: Allow SSH from management to all servers -->
+                <entry name="allow-management-ssh">
+                  <from><member>trust</member></from>
+                  <to><member>dmz</member></to>
+                  <source><member>management</member></source>
+                  <destination><member>all-servers</member></destination>
+                  <service><member>management-services</member></service>
+                  <application><member>any</member></application>
+                  <action>allow</action>
+                  <description>Allow SSH management access to all servers</description>
+                  <log-end>yes</log-end>
+                </entry>
+
+                <!-- Rule 4: Allow app-server to db-server on app port -->
+                <entry name="allow-app-to-db">
+                  <from><member>dmz</member></from>
+                  <to><member>trust</member></to>
+                  <source><member>app-servers</member></source>
+                  <destination><member>db-servers</member></destination>
+                  <service><member>app-svc</member></service>
+                  <application><member>any</member></application>
+                  <action>allow</action>
+                  <description>Allow app service ports from app servers to DB</description>
+                  <log-end>yes</log-end>
+                </entry>
+
+                <!-- Rule 5: Deny DMZ to trust (broad block) -->
+                <entry name="deny-dmz-to-trust">
+                  <from><member>dmz</member></from>
+                  <to><member>trust</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <service><member>any</member></service>
+                  <application><member>any</member></application>
+                  <action>deny</action>
+                  <description>Block all other DMZ to trust traffic</description>
+                  <log-end>yes</log-end>
+                </entry>
+
+                <!-- Rule 6: Allow outbound from trust to untrust -->
+                <entry name="allow-outbound">
+                  <from><member>trust</member></from>
+                  <to><member>untrust</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <service><member>web-services</member></service>
+                  <application><member>any</member></application>
+                  <action>allow</action>
+                  <description>Allow outbound web traffic from trust zone</description>
+                  <log-end>yes</log-end>
+                </entry>
+
+                <!-- Rule 7: Deny all trust to untrust except what is explicitly allowed -->
+                <entry name="deny-trust-to-untrust">
+                  <from><member>trust</member></from>
+                  <to><member>untrust</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <service><member>any</member></service>
+                  <application><member>any</member></application>
+                  <action>deny</action>
+                  <description>Block remaining trust to untrust traffic</description>
+                  <log-end>yes</log-end>
+                </entry>
+
+                <!-- Note: Default deny-all is implicit in PAN-OS and not listed here.
+                     The policy ends at deny-trust-to-untrust above. -->
+
+              </rules>
+            </security>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

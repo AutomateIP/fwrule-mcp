@@ -1,0 +1,237 @@
+{
+  "objects-dictionary": [
+    {
+      "uid": "addr-001",
+      "name": "web-servers",
+      "type": "network",
+      "subnet4": "10.1.1.0",
+      "mask-length4": 24,
+      "comments": "Web server subnet in DMZ"
+    },
+    {
+      "uid": "addr-002",
+      "name": "db-servers",
+      "type": "network",
+      "subnet4": "10.2.1.0",
+      "mask-length4": 24,
+      "comments": "Database server subnet"
+    },
+    {
+      "uid": "addr-003",
+      "name": "app-servers",
+      "type": "network",
+      "subnet4": "10.3.1.0",
+      "mask-length4": 24,
+      "comments": "Application server subnet"
+    },
+    {
+      "uid": "addr-004",
+      "name": "mgmt-network",
+      "type": "network",
+      "subnet4": "10.0.0.0",
+      "mask-length4": 24,
+      "comments": "Management network"
+    },
+    {
+      "uid": "addr-005",
+      "name": "all-servers-group",
+      "type": "group",
+      "members": [
+        {"uid": "addr-001", "name": "web-servers", "type": "network"},
+        {"uid": "addr-002", "name": "db-servers", "type": "network"},
+        {"uid": "addr-003", "name": "app-servers", "type": "network"}
+      ]
+    },
+    {
+      "uid": "svc-001",
+      "name": "HTTP",
+      "type": "service-tcp",
+      "port": "80"
+    },
+    {
+      "uid": "svc-002",
+      "name": "HTTPS",
+      "type": "service-tcp",
+      "port": "443"
+    },
+    {
+      "uid": "svc-003",
+      "name": "MySQL",
+      "type": "service-tcp",
+      "port": "3306"
+    },
+    {
+      "uid": "svc-004",
+      "name": "SSH",
+      "type": "service-tcp",
+      "port": "22"
+    },
+    {
+      "uid": "svc-005",
+      "name": "AppSvc",
+      "type": "service-tcp",
+      "port": "8080-8089"
+    },
+    {
+      "uid": "svc-grp-001",
+      "name": "Web-Services",
+      "type": "service-group",
+      "members": [
+        {"uid": "svc-001", "name": "HTTP", "type": "service-tcp"},
+        {"uid": "svc-002", "name": "HTTPS", "type": "service-tcp"}
+      ]
+    },
+    {
+      "uid": "97aeb369-9aea-11d5-bd16-0090272ccb30",
+      "name": "Any",
+      "type": "host"
+    }
+  ],
+  "rulebase": [
+    {
+      "uid": "rule-001",
+      "name": "allow-web-inbound",
+      "type": "access-rule",
+      "rule-number": 1,
+      "enabled": true,
+      "action": {"uid": "act-001", "name": "Accept"},
+      "source": [
+        {"uid": "97aeb369-9aea-11d5-bd16-0090272ccb30", "name": "Any", "type": "host"}
+      ],
+      "destination": [
+        {"uid": "addr-001", "name": "web-servers", "type": "network"}
+      ],
+      "service": [
+        {"uid": "svc-grp-001", "name": "Web-Services", "type": "service-group"}
+      ],
+      "from-zone": {"name": "external"},
+      "to-zone": {"name": "dmz"},
+      "comments": "Allow HTTP and HTTPS traffic to web server subnet",
+      "track": {"type": {"name": "Log"}}
+    },
+    {
+      "uid": "rule-002",
+      "name": "allow-db-from-app",
+      "type": "access-rule",
+      "rule-number": 2,
+      "enabled": true,
+      "action": {"uid": "act-001", "name": "Accept"},
+      "source": [
+        {"uid": "addr-003", "name": "app-servers", "type": "network"}
+      ],
+      "destination": [
+        {"uid": "addr-002", "name": "db-servers", "type": "network"}
+      ],
+      "service": [
+        {"uid": "svc-003", "name": "MySQL", "type": "service-tcp"}
+      ],
+      "from-zone": {"name": "dmz"},
+      "to-zone": {"name": "internal"},
+      "comments": "Allow MySQL from app servers to DB servers",
+      "track": {"type": {"name": "Log"}}
+    },
+    {
+      "uid": "rule-003",
+      "name": "allow-mgmt-ssh",
+      "type": "access-rule",
+      "rule-number": 3,
+      "enabled": true,
+      "action": {"uid": "act-001", "name": "Accept"},
+      "source": [
+        {"uid": "addr-004", "name": "mgmt-network", "type": "network"}
+      ],
+      "destination": [
+        {"uid": "addr-005", "name": "all-servers-group", "type": "group"}
+      ],
+      "service": [
+        {"uid": "svc-004", "name": "SSH", "type": "service-tcp"}
+      ],
+      "comments": "Allow SSH management access to all servers",
+      "track": {"type": {"name": "Log"}}
+    },
+    {
+      "uid": "rule-004",
+      "name": "allow-app-service-ports",
+      "type": "access-rule",
+      "rule-number": 4,
+      "enabled": true,
+      "action": {"uid": "act-001", "name": "Accept"},
+      "source": [
+        {"uid": "addr-003", "name": "app-servers", "type": "network"}
+      ],
+      "destination": [
+        {"uid": "addr-002", "name": "db-servers", "type": "network"}
+      ],
+      "service": [
+        {"uid": "svc-005", "name": "AppSvc", "type": "service-tcp"}
+      ],
+      "from-zone": {"name": "dmz"},
+      "to-zone": {"name": "internal"},
+      "comments": "Allow app service port range from app servers to DB",
+      "track": {"type": {"name": "Log"}}
+    },
+    {
+      "uid": "rule-005",
+      "name": "block-dmz-to-internal",
+      "type": "access-rule",
+      "rule-number": 5,
+      "enabled": true,
+      "action": {"uid": "act-002", "name": "Drop"},
+      "source": [
+        {"uid": "97aeb369-9aea-11d5-bd16-0090272ccb30", "name": "Any", "type": "host"}
+      ],
+      "destination": [
+        {"uid": "97aeb369-9aea-11d5-bd16-0090272ccb30", "name": "Any", "type": "host"}
+      ],
+      "service": [
+        {"uid": "97aeb369-9aea-11d5-bd16-0090272ccb30", "name": "Any", "type": "host"}
+      ],
+      "from-zone": {"name": "dmz"},
+      "to-zone": {"name": "internal"},
+      "comments": "Block all other DMZ to internal traffic",
+      "track": {"type": {"name": "Log"}}
+    },
+    {
+      "uid": "rule-006",
+      "name": "allow-outbound-web",
+      "type": "access-rule",
+      "rule-number": 6,
+      "enabled": true,
+      "action": {"uid": "act-001", "name": "Accept"},
+      "source": [
+        {"uid": "97aeb369-9aea-11d5-bd16-0090272ccb30", "name": "Any", "type": "host"}
+      ],
+      "destination": [
+        {"uid": "97aeb369-9aea-11d5-bd16-0090272ccb30", "name": "Any", "type": "host"}
+      ],
+      "service": [
+        {"uid": "svc-grp-001", "name": "Web-Services", "type": "service-group"}
+      ],
+      "from-zone": {"name": "internal"},
+      "to-zone": {"name": "external"},
+      "comments": "Allow outbound web traffic from internal to external",
+      "track": {"type": {"name": "Log"}}
+    },
+    {
+      "uid": "rule-007",
+      "name": "drop-outbound-nonweb",
+      "type": "access-rule",
+      "rule-number": 7,
+      "enabled": true,
+      "action": {"uid": "act-002", "name": "Drop"},
+      "source": [
+        {"uid": "97aeb369-9aea-11d5-bd16-0090272ccb30", "name": "Any", "type": "host"}
+      ],
+      "destination": [
+        {"uid": "97aeb369-9aea-11d5-bd16-0090272ccb30", "name": "Any", "type": "host"}
+      ],
+      "service": [
+        {"uid": "svc-grp-001", "name": "Web-Services", "type": "service-group"}
+      ],
+      "from-zone": {"name": "internal"},
+      "to-zone": {"name": "external"},
+      "comments": "Drop non-web outbound - note this conflicts with rule-006 intentionally for testing",
+      "track": {"type": {"name": "Log"}}
+    }
+  ]
+}

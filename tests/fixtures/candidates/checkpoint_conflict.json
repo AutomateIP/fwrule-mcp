@@ -1,0 +1,19 @@
+{
+  "uid": "cand-conf-001",
+  "name": "drop-web-inbound",
+  "type": "access-rule",
+  "enabled": true,
+  "action": {"uid": "act-002", "name": "Drop"},
+  "source": [
+    {"uid": "97aeb369-9aea-11d5-bd16-0090272ccb30", "name": "Any", "type": "host"}
+  ],
+  "destination": [
+    {"uid": "addr-001", "name": "web-servers", "type": "network"}
+  ],
+  "service": [
+    {"uid": "svc-grp-001", "name": "Web-Services", "type": "service-group"}
+  ],
+  "from-zone": {"name": "external"},
+  "to-zone": {"name": "dmz"},
+  "comments": "Conflict: Drop vs Accept for same traffic match as allow-web-inbound"
+}

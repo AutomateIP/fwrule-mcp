@@ -1,0 +1,15 @@
+<!-- PAN-OS Candidate: PARTIAL_OVERLAP with allow-db-access (rule 2)
+     allow-db-access: dmz->trust, app-servers(10.3.1.0/24)->db-servers(10.2.1.0/24), mysql(tcp/3306), allow
+     This candidate: dmz->trust, 10.3.1.0/24->10.2.0.0/16 (superset dest), tcp/3306 (equal service)
+     Source address equal, destination is superset (10.2.0.0/16 contains 10.2.1.0/24 but is larger)
+     → PARTIAL_OVERLAP (not all dimensions equal/subset/superset uniformly) -->
+<entry name="allow-db-broader-subnet">
+  <from><member>dmz</member></from>
+  <to><member>trust</member></to>
+  <source><member>app-servers</member></source>
+  <destination><member>10.2.0.0/16</member></destination>
+  <service><member>mysql</member></service>
+  <application><member>any</member></application>
+  <action>allow</action>
+  <description>Partial overlap - targets broader DB subnet superset</description>
+</entry>

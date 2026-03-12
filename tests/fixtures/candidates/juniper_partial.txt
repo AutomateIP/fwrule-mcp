@@ -1,0 +1,5 @@
+set security zones security-zone trust address-book address db-supernet 10.2.0.0/16
+set security policies from-zone dmz to-zone trust policy allow-db-broader-subnet match source-address app-servers
+set security policies from-zone dmz to-zone trust policy allow-db-broader-subnet match destination-address db-supernet
+set security policies from-zone dmz to-zone trust policy allow-db-broader-subnet match application app-mysql
+set security policies from-zone dmz to-zone trust policy allow-db-broader-subnet then permit

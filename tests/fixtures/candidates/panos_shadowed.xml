@@ -1,0 +1,15 @@
+<!-- PAN-OS Candidate: SHADOWED by allow-web-traffic (rule 1)
+     allow-web-traffic: trust->dmz, any->web-servers, web-services (tcp/80+443), allow
+     This candidate is a strict subset: single host 10.1.1.5/32 within web-servers (10.1.1.0/24),
+     tcp/443 only (subset of web-services), same zones.
+     Since allow-web-traffic appears first with a superset match, this candidate is shadowed. -->
+<entry name="narrow-https-to-web-host">
+  <from><member>trust</member></from>
+  <to><member>dmz</member></to>
+  <source><member>any</member></source>
+  <destination><member>10.1.1.5/32</member></destination>
+  <service><member>https</member></service>
+  <application><member>any</member></application>
+  <action>allow</action>
+  <description>Narrower rule - only HTTPS to specific web host, shadowed by allow-web-traffic</description>
+</entry>

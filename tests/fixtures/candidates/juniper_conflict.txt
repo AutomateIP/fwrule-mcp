@@ -1,0 +1,4 @@
+set security policies from-zone untrust to-zone dmz policy deny-web-inbound match source-address any
+set security policies from-zone untrust to-zone dmz policy deny-web-inbound match destination-address web-servers
+set security policies from-zone untrust to-zone dmz policy deny-web-inbound match application web-services
+set security policies from-zone untrust to-zone dmz policy deny-web-inbound then deny

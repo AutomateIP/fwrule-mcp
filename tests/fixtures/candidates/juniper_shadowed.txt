@@ -1,0 +1,7 @@
+set security zones security-zone dmz address-book address web-host-specific 10.1.1.5/32
+set applications application-set web-services application app-http
+set applications application-set web-services application app-https
+set security policies from-zone untrust to-zone dmz policy narrow-to-web-host match source-address any
+set security policies from-zone untrust to-zone dmz policy narrow-to-web-host match destination-address web-host-specific
+set security policies from-zone untrust to-zone dmz policy narrow-to-web-host match application web-services
+set security policies from-zone untrust to-zone dmz policy narrow-to-web-host then permit

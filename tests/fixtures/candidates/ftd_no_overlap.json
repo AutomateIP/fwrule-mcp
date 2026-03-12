@@ -1,0 +1,23 @@
+{
+  "id": "cand-noop-001",
+  "name": "allow-isolated-vpn-traffic",
+  "action": "ALLOW",
+  "enabled": true,
+  "description": "Completely disjoint - different zones and IP space not in policy",
+  "sourceZones": {
+    "objects": [{"id": "zone-vpn", "name": "vpn-zone"}]
+  },
+  "destinationZones": {
+    "objects": [{"id": "zone-backend", "name": "backend"}]
+  },
+  "sourceNetworks": {
+    "literals": [{"type": "Network", "value": "172.31.200.0/24"}]
+  },
+  "destinationNetworks": {
+    "literals": [{"type": "Network", "value": "192.168.200.0/24"}]
+  },
+  "sourcePorts": {},
+  "destinationPorts": {
+    "literals": [{"type": "PortLiteral", "protocol": "6", "port": "8443"}]
+  }
+}

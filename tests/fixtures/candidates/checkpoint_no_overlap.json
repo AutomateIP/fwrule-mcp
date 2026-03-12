@@ -1,0 +1,22 @@
+{
+  "uid": "cand-noop-001",
+  "name": "allow-vpn-to-isolated-backend",
+  "type": "access-rule",
+  "enabled": true,
+  "action": {"uid": "act-001", "name": "Accept"},
+  "source": [
+    {"uid": "vpn-net-001", "name": "172.31.200.0/24", "type": "network",
+     "subnet4": "172.31.200.0", "mask-length4": 24}
+  ],
+  "destination": [
+    {"uid": "back-net-001", "name": "192.168.200.0/24", "type": "network",
+     "subnet4": "192.168.200.0", "mask-length4": 24}
+  ],
+  "service": [
+    {"uid": "svc-custom-001", "name": "CustomPort8443", "type": "service-tcp",
+     "port": "8443"}
+  ],
+  "from-zone": {"name": "vpn"},
+  "to-zone": {"name": "isolated-backend"},
+  "comments": "Completely disjoint: different zones and IP space not used in policy"
+}

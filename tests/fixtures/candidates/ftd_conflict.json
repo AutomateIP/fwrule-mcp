@@ -1,0 +1,24 @@
+{
+  "id": "cand-conf-001",
+  "name": "block-web-inbound",
+  "action": "BLOCK",
+  "enabled": true,
+  "description": "Conflicts with allow-web-inbound - same match criteria but blocks",
+  "sourceZones": {
+    "objects": [{"id": "zone-001", "name": "outside"}]
+  },
+  "destinationZones": {
+    "objects": [{"id": "zone-002", "name": "dmz"}]
+  },
+  "sourceNetworks": {},
+  "destinationNetworks": {
+    "objects": [{"id": "net-obj-001", "name": "WEB_SERVERS", "type": "Network"}]
+  },
+  "sourcePorts": {},
+  "destinationPorts": {
+    "objects": [
+      {"id": "svc-obj-001", "name": "HTTPS_PORT", "type": "ProtocolPortObject"},
+      {"id": "svc-obj-002", "name": "HTTP_PORT", "type": "ProtocolPortObject"}
+    ]
+  }
+}

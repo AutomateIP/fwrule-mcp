@@ -1,0 +1,19 @@
+{
+  "uid": "cand-shad-001",
+  "name": "allow-https-to-single-web-host",
+  "type": "access-rule",
+  "enabled": true,
+  "action": {"uid": "act-001", "name": "Accept"},
+  "source": [
+    {"uid": "97aeb369-9aea-11d5-bd16-0090272ccb30", "name": "Any", "type": "host"}
+  ],
+  "destination": [
+    {"uid": "host-001", "name": "10.1.1.30", "type": "host", "ipv4-address": "10.1.1.30"}
+  ],
+  "service": [
+    {"uid": "svc-002", "name": "HTTPS", "type": "service-tcp"}
+  ],
+  "from-zone": {"name": "external"},
+  "to-zone": {"name": "dmz"},
+  "comments": "Shadowed: allow-web-inbound is a superset covering any->web-servers on web-services"
+}

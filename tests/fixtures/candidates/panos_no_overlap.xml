@@ -1,0 +1,15 @@
+<!-- PAN-OS Candidate: NO_OVERLAP with any existing rule
+     All existing rules use trust, dmz, or untrust zones.
+     This candidate uses zones "external" and "backend" which don't exist in the policy.
+     Additionally uses a completely different subnet (192.168.100.0/24) not referenced anywhere.
+     Zone disjoint → NO_OVERLAP guaranteed. -->
+<entry name="allow-external-to-backend">
+  <from><member>external</member></from>
+  <to><member>backend</member></to>
+  <source><member>192.168.100.0/24</member></source>
+  <destination><member>172.16.50.0/24</member></destination>
+  <service><member>ssh</member></service>
+  <application><member>any</member></application>
+  <action>allow</action>
+  <description>Completely disjoint rule - different zones and subnets not in policy</description>
+</entry>

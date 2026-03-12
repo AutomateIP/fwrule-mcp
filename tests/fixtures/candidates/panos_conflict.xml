@@ -1,0 +1,14 @@
+<!-- PAN-OS Candidate: CONFLICT with allow-web-traffic (rule 1)
+     allow-web-traffic: trust->dmz, any->web-servers, web-services (tcp/80+443), action=allow
+     This candidate: same zones and destination, but action=deny for the same service group.
+     Same match criteria, opposing actions → CONFLICT -->
+<entry name="deny-web-traffic">
+  <from><member>trust</member></from>
+  <to><member>dmz</member></to>
+  <source><member>any</member></source>
+  <destination><member>web-servers</member></destination>
+  <service><member>web-services</member></service>
+  <application><member>any</member></application>
+  <action>deny</action>
+  <description>Conflicting deny rule for web traffic - conflicts with allow-web-traffic</description>
+</entry>

@@ -1,0 +1,23 @@
+{
+  "id": "cand-part-001",
+  "name": "allow-db-broader-dest",
+  "action": "ALLOW",
+  "enabled": true,
+  "description": "Partial overlap with allow-db-from-app: same source/service but broader destination",
+  "sourceZones": {
+    "objects": [{"id": "zone-002", "name": "dmz"}]
+  },
+  "destinationZones": {
+    "objects": [{"id": "zone-003", "name": "inside"}]
+  },
+  "sourceNetworks": {
+    "objects": [{"id": "net-obj-003", "name": "APP_SERVERS", "type": "Network"}]
+  },
+  "destinationNetworks": {
+    "literals": [{"type": "Network", "value": "10.2.0.0/16"}]
+  },
+  "sourcePorts": {},
+  "destinationPorts": {
+    "objects": [{"id": "svc-obj-003", "name": "MYSQL_PORT", "type": "ProtocolPortObject"}]
+  }
+}

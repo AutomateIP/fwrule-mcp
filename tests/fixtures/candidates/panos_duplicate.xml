@@ -1,0 +1,14 @@
+<!-- PAN-OS Candidate: EXACT_DUPLICATE of allow-web-traffic (rule 1)
+     Matches same zones, source=any, destination=web-servers, service=web-services, action=allow
+     web-services resolves to http+https (tcp/80, tcp/443)
+     This is a structural duplicate: same traffic match + same action -->
+<entry name="dup-allow-web-traffic">
+  <from><member>trust</member></from>
+  <to><member>dmz</member></to>
+  <source><member>any</member></source>
+  <destination><member>web-servers</member></destination>
+  <service><member>web-services</member></service>
+  <application><member>any</member></application>
+  <action>allow</action>
+  <description>Duplicate of allow-web-traffic rule</description>
+</entry>

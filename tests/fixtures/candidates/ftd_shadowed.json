@@ -1,0 +1,21 @@
+{
+  "id": "cand-shad-001",
+  "name": "allow-https-to-specific-web-host",
+  "action": "ALLOW",
+  "enabled": true,
+  "description": "Narrower rule shadowed by allow-web-inbound (superset above it)",
+  "sourceZones": {
+    "objects": [{"id": "zone-001", "name": "outside"}]
+  },
+  "destinationZones": {
+    "objects": [{"id": "zone-002", "name": "dmz"}]
+  },
+  "sourceNetworks": {},
+  "destinationNetworks": {
+    "literals": [{"type": "Host", "value": "10.1.1.20"}]
+  },
+  "sourcePorts": {},
+  "destinationPorts": {
+    "objects": [{"id": "svc-obj-001", "name": "HTTPS_PORT", "type": "ProtocolPortObject"}]
+  }
+}

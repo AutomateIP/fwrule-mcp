@@ -1,0 +1,97 @@
+# Juniper SRX Security Policy Configuration
+# Format: set commands (show configuration | display set)
+# Device: srx-fw-01.corp.example.com
+
+# ============================================================
+# Address Book — Trust Zone
+# ============================================================
+set security zones security-zone trust address-book address mgmt-network 10.0.0.0/24
+set security zones security-zone trust address-book address app-servers 10.3.1.0/24
+set security zones security-zone trust address-book address db-servers 10.2.1.0/24
+set security zones security-zone trust address-book address-set all-internal address mgmt-network
+set security zones security-zone trust address-book address-set all-internal address app-servers
+set security zones security-zone trust address-book address-set all-internal address db-servers
+
+# ============================================================
+# Address Book — DMZ Zone
+# ============================================================
+set security zones security-zone dmz address-book address web-servers 10.1.1.0/24
+set security zones security-zone dmz address-book address app-servers-dmz 10.3.1.0/24
+
+# ============================================================
+# Address Book — Untrust Zone
+# ============================================================
+set security zones security-zone untrust address-book address internet-any 0.0.0.0/0
+
+# ============================================================
+# Custom Applications
+# ============================================================
+set applications application app-mysql protocol tcp
+set applications application app-mysql destination-port 3306
+
+set applications application app-ssh protocol tcp
+set applications application app-ssh destination-port 22
+
+set applications application app-http protocol tcp
+set applications application app-http destination-port 80
+
+set applications application app-https protocol tcp
+set applications application app-https destination-port 443
+
+set applications application app-svc-range protocol tcp
+set applications application app-svc-range destination-port 8080-8089
+
+# Application Sets
+set applications application-set web-services application app-http
+set applications application-set web-services application app-https
+
+set applications application-set mgmt-services application app-ssh
+
+# ============================================================
+# Security Policies — untrust to dmz (inbound web traffic)
+# ============================================================
+set security policies from-zone untrust to-zone dmz policy allow-web-inbound match source-address any
+set security policies from-zone untrust to-zone dmz policy allow-web-inbound match destination-address web-servers
+set security policies from-zone untrust to-zone dmz policy allow-web-inbound match application web-services
+set security policies from-zone untrust to-zone dmz policy allow-web-inbound then permit
+
+# ============================================================
+# Security Policies — dmz to trust (app to DB)
+# ============================================================
+set security policies from-zone dmz to-zone trust policy allow-db-from-app match source-address app-servers-dmz
+set security policies from-zone dmz to-zone trust policy allow-db-from-app match destination-address db-servers
+set security policies from-zone dmz to-zone trust policy allow-db-from-app match application app-mysql
+set security policies from-zone dmz to-zone trust policy allow-db-from-app then permit
+
+set security policies from-zone dmz to-zone trust policy allow-app-svc-ports match source-address app-servers-dmz
+set security policies from-zone dmz to-zone trust policy allow-app-svc-ports match destination-address db-servers
+set security policies from-zone dmz to-zone trust policy allow-app-svc-ports match application app-svc-range
+set security policies from-zone dmz to-zone trust policy allow-app-svc-ports then permit
+
+set security policies from-zone dmz to-zone trust policy deny-dmz-to-trust match source-address any
+set security policies from-zone dmz to-zone trust policy deny-dmz-to-trust match destination-address any
+set security policies from-zone dmz to-zone trust policy deny-dmz-to-trust match application any
+set security policies from-zone dmz to-zone trust policy deny-dmz-to-trust then deny
+
+# ============================================================
+# Security Policies — trust to dmz (management SSH)
+# ============================================================
+set security policies from-zone trust to-zone dmz policy allow-mgmt-ssh match source-address mgmt-network
+set security policies from-zone trust to-zone dmz policy allow-mgmt-ssh match destination-address web-servers
+set security policies from-zone trust to-zone dmz policy allow-mgmt-ssh match application app-ssh
+set security policies from-zone trust to-zone dmz policy allow-mgmt-ssh then permit
+
+set security policies from-zone trust to-zone dmz policy deny-trust-to-dmz match source-address any
+set security policies from-zone trust to-zone dmz policy deny-trust-to-dmz match destination-address any
+set security policies from-zone trust to-zone dmz policy deny-trust-to-dmz match application any
+set security policies from-zone trust to-zone dmz policy deny-trust-to-dmz then deny
+
+# ============================================================
+# Security Policies — trust to untrust (outbound)
+# ============================================================
+set security policies from-zone trust to-zone untrust policy allow-outbound-web match source-address any
+set security policies from-zone trust to-zone untrust policy allow-outbound-web match destination-address any
+set security policies from-zone trust to-zone untrust policy allow-outbound-web match application web-services
+set security policies from-zone trust to-zone untrust policy allow-outbound-web then permit
+
+# Note: default-deny is implicit in Juniper SRX and not explicitly listed here

@@ -1,0 +1,8 @@
+set security zones security-zone vpn address-book address vpn-clients 172.31.200.0/24
+set security zones security-zone isolated address-book address isolated-backend 192.168.200.0/24
+set applications application app-custom-8443 protocol tcp
+set applications application app-custom-8443 destination-port 8443
+set security policies from-zone vpn to-zone isolated policy allow-vpn-to-isolated match source-address vpn-clients
+set security policies from-zone vpn to-zone isolated policy allow-vpn-to-isolated match destination-address isolated-backend
+set security policies from-zone vpn to-zone isolated policy allow-vpn-to-isolated match application app-custom-8443
+set security policies from-zone vpn to-zone isolated policy allow-vpn-to-isolated then permit

@@ -1,0 +1,235 @@
+{
+  "metadata": {
+    "ftdVersion": "7.2.0",
+    "fmcVersion": "7.2.0",
+    "policyName": "Corp-Access-Policy",
+    "exportTime": "2024-01-15T10:30:00Z"
+  },
+  "objects": [
+    {
+      "id": "net-obj-001",
+      "name": "WEB_SERVERS",
+      "type": "Network",
+      "value": "10.1.1.0/24"
+    },
+    {
+      "id": "net-obj-002",
+      "name": "DB_SERVERS",
+      "type": "Network",
+      "value": "10.2.1.0/24"
+    },
+    {
+      "id": "net-obj-003",
+      "name": "APP_SERVERS",
+      "type": "Network",
+      "value": "10.3.1.0/24"
+    },
+    {
+      "id": "net-obj-004",
+      "name": "MGMT_NET",
+      "type": "Network",
+      "value": "10.0.0.0/24"
+    },
+    {
+      "id": "net-grp-001",
+      "name": "ALL_SERVERS",
+      "type": "NetworkGroup",
+      "objects": [
+        {"id": "net-obj-001", "name": "WEB_SERVERS", "type": "Network"},
+        {"id": "net-obj-002", "name": "DB_SERVERS", "type": "Network"},
+        {"id": "net-obj-003", "name": "APP_SERVERS", "type": "Network"}
+      ]
+    },
+    {
+      "id": "svc-obj-001",
+      "name": "HTTPS_PORT",
+      "type": "ProtocolPortObject",
+      "protocol": "6",
+      "port": "443"
+    },
+    {
+      "id": "svc-obj-002",
+      "name": "HTTP_PORT",
+      "type": "ProtocolPortObject",
+      "protocol": "6",
+      "port": "80"
+    },
+    {
+      "id": "svc-obj-003",
+      "name": "MYSQL_PORT",
+      "type": "ProtocolPortObject",
+      "protocol": "6",
+      "port": "3306"
+    },
+    {
+      "id": "svc-obj-004",
+      "name": "SSH_PORT",
+      "type": "ProtocolPortObject",
+      "protocol": "6",
+      "port": "22"
+    }
+  ],
+  "rules": [
+    {
+      "id": "rule-001",
+      "name": "allow-web-inbound",
+      "action": "ALLOW",
+      "enabled": true,
+      "description": "Allow HTTP and HTTPS traffic to web servers",
+      "sourceZones": {
+        "objects": [{"id": "zone-001", "name": "outside"}]
+      },
+      "destinationZones": {
+        "objects": [{"id": "zone-002", "name": "dmz"}]
+      },
+      "sourceNetworks": {},
+      "destinationNetworks": {
+        "objects": [{"id": "net-obj-001", "name": "WEB_SERVERS", "type": "Network"}]
+      },
+      "sourcePorts": {},
+      "destinationPorts": {
+        "objects": [
+          {"id": "svc-obj-001", "name": "HTTPS_PORT", "type": "ProtocolPortObject"},
+          {"id": "svc-obj-002", "name": "HTTP_PORT", "type": "ProtocolPortObject"}
+        ]
+      },
+      "logBegin": false,
+      "logEnd": true
+    },
+    {
+      "id": "rule-002",
+      "name": "allow-db-from-app",
+      "action": "ALLOW",
+      "enabled": true,
+      "description": "Allow MySQL from app servers to DB servers",
+      "sourceZones": {
+        "objects": [{"id": "zone-002", "name": "dmz"}]
+      },
+      "destinationZones": {
+        "objects": [{"id": "zone-003", "name": "inside"}]
+      },
+      "sourceNetworks": {
+        "objects": [{"id": "net-obj-003", "name": "APP_SERVERS", "type": "Network"}]
+      },
+      "destinationNetworks": {
+        "objects": [{"id": "net-obj-002", "name": "DB_SERVERS", "type": "Network"}]
+      },
+      "sourcePorts": {},
+      "destinationPorts": {
+        "objects": [{"id": "svc-obj-003", "name": "MYSQL_PORT", "type": "ProtocolPortObject"}]
+      },
+      "logBegin": false,
+      "logEnd": true
+    },
+    {
+      "id": "rule-003",
+      "name": "allow-mgmt-ssh",
+      "action": "ALLOW",
+      "enabled": true,
+      "description": "Allow SSH management access to all servers",
+      "sourceZones": {},
+      "destinationZones": {},
+      "sourceNetworks": {
+        "objects": [{"id": "net-obj-004", "name": "MGMT_NET", "type": "Network"}]
+      },
+      "destinationNetworks": {
+        "objects": [{"id": "net-grp-001", "name": "ALL_SERVERS", "type": "NetworkGroup"}]
+      },
+      "sourcePorts": {},
+      "destinationPorts": {
+        "objects": [{"id": "svc-obj-004", "name": "SSH_PORT", "type": "ProtocolPortObject"}]
+      },
+      "logBegin": false,
+      "logEnd": true
+    },
+    {
+      "id": "rule-004",
+      "name": "allow-app-svc-ports",
+      "action": "ALLOW",
+      "enabled": true,
+      "description": "Allow app service port range from app servers to DB",
+      "sourceZones": {
+        "objects": [{"id": "zone-002", "name": "dmz"}]
+      },
+      "destinationZones": {
+        "objects": [{"id": "zone-003", "name": "inside"}]
+      },
+      "sourceNetworks": {
+        "objects": [{"id": "net-obj-003", "name": "APP_SERVERS", "type": "Network"}]
+      },
+      "destinationNetworks": {
+        "objects": [{"id": "net-obj-002", "name": "DB_SERVERS", "type": "Network"}]
+      },
+      "sourcePorts": {},
+      "destinationPorts": {
+        "literals": [
+          {"type": "PortLiteral", "protocol": "6", "port": "8080-8089"}
+        ]
+      },
+      "logBegin": false,
+      "logEnd": true
+    },
+    {
+      "id": "rule-005",
+      "name": "block-dmz-to-trust",
+      "action": "BLOCK",
+      "enabled": true,
+      "description": "Block all other DMZ to inside traffic",
+      "sourceZones": {
+        "objects": [{"id": "zone-002", "name": "dmz"}]
+      },
+      "destinationZones": {
+        "objects": [{"id": "zone-003", "name": "inside"}]
+      },
+      "sourceNetworks": {},
+      "destinationNetworks": {},
+      "sourcePorts": {},
+      "destinationPorts": {},
+      "logBegin": true,
+      "logEnd": true
+    },
+    {
+      "id": "rule-006",
+      "name": "allow-outbound-web",
+      "action": "ALLOW",
+      "enabled": true,
+      "description": "Allow outbound web traffic from inside",
+      "sourceZones": {
+        "objects": [{"id": "zone-003", "name": "inside"}]
+      },
+      "destinationZones": {
+        "objects": [{"id": "zone-001", "name": "outside"}]
+      },
+      "sourceNetworks": {},
+      "destinationNetworks": {},
+      "sourcePorts": {},
+      "destinationPorts": {
+        "objects": [
+          {"id": "svc-obj-001", "name": "HTTPS_PORT", "type": "ProtocolPortObject"},
+          {"id": "svc-obj-002", "name": "HTTP_PORT", "type": "ProtocolPortObject"}
+        ]
+      },
+      "logBegin": false,
+      "logEnd": false
+    },
+    {
+      "id": "rule-007",
+      "name": "block-outbound-nonweb",
+      "action": "BLOCK",
+      "enabled": true,
+      "description": "Block non-web outbound from inside to outside",
+      "sourceZones": {
+        "objects": [{"id": "zone-003", "name": "inside"}]
+      },
+      "destinationZones": {
+        "objects": [{"id": "zone-001", "name": "outside"}]
+      },
+      "sourceNetworks": {},
+      "destinationNetworks": {},
+      "sourcePorts": {},
+      "destinationPorts": {},
+      "logBegin": true,
+      "logEnd": true
+    }
+  ]
+}
