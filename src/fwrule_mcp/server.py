@@ -531,13 +531,24 @@ def list_supported_vendors() -> dict:
 
 
 def main() -> None:
-    """Entry point for the ``firewall-overlap-mcp`` CLI command."""
+    """Entry point for the ``fwrule-mcp`` CLI command."""
+    import os
+
+    # Suppress logging to stderr in stdio transport mode — some MCP hosts
+    # (e.g., iagctl) may be confused by unexpected stderr output.
+    log_level = os.environ.get("FWRULE_LOG_LEVEL", "WARNING").upper()
     logging.basicConfig(
-        level=logging.INFO,
+        level=getattr(logging, log_level, logging.WARNING),
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
-    logger.info("Starting FWRule MCP — Firewall Rule Analyzer MCP server (stdio transport)")
-    mcp.run()
+
+    # Disable FastMCP's PyPI version check and startup banner — the version
+    # check can hang in restricted network environments and cause MCP client
+    # connection timeouts.
+    os.environ.setdefault("FASTMCP_CHECK_FOR_UPDATES", "0")
+    os.environ.setdefault("FASTMCP_SHOW_SERVER_BANNER", "0")
+
+    mcp.run(show_banner=False)
 
 
 if __name__ == "__main__":
