@@ -445,27 +445,14 @@ def analyze_firewall_rule_overlap(
         "by analyze_firewall_rule_overlap."
     ),
 )
-def list_supported_vendors() -> dict:
+def list_supported_vendors() -> str:
     """
     List all supported firewall vendors.
 
-    Returns a dict with a ``vendors`` list.  Each entry describes a supported
-    vendor, including the expected configuration format and supported OS versions.
-
-    Returns:
-        {
-          "vendors": [
-            {
-              "id": str,          # Vendor identifier to pass to analyze_firewall_rule_overlap
-              "name": str,        # Human-readable vendor name
-              "format": str,      # Expected configuration format description
-              "versions": str,    # Supported OS version range
-              "notes": str        # Optional additional usage notes
-            }
-          ]
-        }
+    Returns a JSON string describing supported vendors, their expected
+    configuration formats, and OS version ranges.
     """
-    return {
+    return json.dumps({
         "vendors": [
             {
                 "id": "panos",
@@ -522,7 +509,7 @@ def list_supported_vendors() -> dict:
                 ),
             },
         ]
-    }
+    })
 
 
 # ---------------------------------------------------------------------------
