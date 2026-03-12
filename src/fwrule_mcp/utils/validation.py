@@ -40,6 +40,28 @@ class ValidationError(Exception):
 
 SUPPORTED_VENDORS = frozenset({"panos", "asa", "ftd", "checkpoint", "juniper"})
 
+# Common aliases that LLMs and users might use instead of the canonical ID.
+VENDOR_ALIASES: dict[str, str] = {
+    "paloalto": "panos",
+    "palo_alto": "panos",
+    "palo-alto": "panos",
+    "pan-os": "panos",
+    "panorama": "panos",
+    "cisco_asa": "asa",
+    "cisco-asa": "asa",
+    "cisco_ftd": "ftd",
+    "cisco-ftd": "ftd",
+    "firepower": "ftd",
+    "fmc": "ftd",
+    "check_point": "checkpoint",
+    "check-point": "checkpoint",
+    "cp": "checkpoint",
+    "juniper_srx": "juniper",
+    "juniper-srx": "juniper",
+    "srx": "juniper",
+    "junos": "juniper",
+}
+
 
 # ---------------------------------------------------------------------------
 # Vendor validation
@@ -50,25 +72,33 @@ def validate_vendor(vendor: str) -> str:
     """
     Validate and normalize a vendor identifier.
 
+    Accepts canonical IDs (panos, asa, ftd, checkpoint, juniper) as well as
+    common aliases (paloalto, panorama, firepower, srx, etc.).
+
     Args:
         vendor: Raw vendor string from the request.
 
     Returns:
-        Normalized (lowercase, stripped) vendor identifier.
+        Normalized canonical vendor identifier.
 
     Raises:
-        ValidationError: If the vendor is not in SUPPORTED_VENDORS.
+        ValidationError: If the vendor is not recognized.
     """
-    normalized = vendor.lower().strip()
-    if normalized not in SUPPORTED_VENDORS:
-        raise ValidationError(
-            field="vendor",
-            message=(
-                f"Unsupported vendor '{vendor}'. "
-                f"Supported values: {sorted(SUPPORTED_VENDORS)}"
-            ),
-        )
-    return normalized
+    normalized = vendor.lower().strip().replace(" ", "_")
+    # Check canonical IDs first
+    if normalized in SUPPORTED_VENDORS:
+        return normalized
+    # Check aliases
+    if normalized in VENDOR_ALIASES:
+        return VENDOR_ALIASES[normalized]
+    raise ValidationError(
+        field="vendor",
+        message=(
+            f"Unsupported vendor '{vendor}'. "
+            f"Supported values: {sorted(SUPPORTED_VENDORS)}. "
+            f"Also accepted: {', '.join(sorted(VENDOR_ALIASES.keys()))}"
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
