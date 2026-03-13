@@ -199,11 +199,21 @@ class PANOSParser(VendorParser):
         warnings: list[str] = []
         try:
             entry = _safe_parse_xml(raw_rule)
-            # If the root is not an <entry>, look for one inside
-            if entry.tag != "entry":
-                found = entry.find(".//entry")
+            # If the root is not an <entry>, find the security rule entry.
+            # A security rule <entry> has an <action> child, which distinguishes
+            # it from device/vsys/rulebase wrapper <entry> elements.
+            if entry.tag != "entry" or entry.find("action") is None:
+                found = None
+                for candidate in entry.iter("entry"):
+                    if candidate.find("action") is not None:
+                        found = candidate
+                        break
                 if found is None:
-                    raise ValueError("No <entry> element found in candidate XML")
+                    # Fallback: try the deepest entry (last in document order)
+                    all_entries = list(entry.iter("entry"))
+                    found = all_entries[-1] if all_entries else None
+                if found is None:
+                    raise ValueError("No security rule <entry> element found in candidate XML")
                 entry = found
         except ET.ParseError as exc:
             raise ValueError(f"Cannot parse candidate PAN-OS rule XML: {exc}") from exc
