@@ -1,0 +1,18 @@
+configure {
+    filter {
+        ip-filter "CANDIDATE" {
+            entry 10 {
+                match {
+                    protocol tcp
+                    dst-ip 10.1.1.0/24
+                    dst-port {
+                        eq 80
+                    }
+                }
+                action {
+                    accept
+                }
+            }
+        }
+    }
+}

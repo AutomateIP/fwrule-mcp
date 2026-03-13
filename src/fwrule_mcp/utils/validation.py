@@ -38,28 +38,70 @@ class ValidationError(Exception):
 # Supported vendors
 # ---------------------------------------------------------------------------
 
-SUPPORTED_VENDORS = frozenset({"panos", "asa", "ftd", "checkpoint", "juniper"})
+SUPPORTED_VENDORS = frozenset({
+    "panos",
+    "asa",
+    "ftd",
+    "checkpoint",
+    "juniper",
+    "ios",
+    "iosxr",
+    "junos",
+    "sros",
+})
 
 # Common aliases that LLMs and users might use instead of the canonical ID.
 VENDOR_ALIASES: dict[str, str] = {
+    # --- Palo Alto ---
     "paloalto": "panos",
     "palo_alto": "panos",
     "palo-alto": "panos",
     "pan-os": "panos",
     "panorama": "panos",
+    # --- Cisco ASA ---
     "cisco_asa": "asa",
     "cisco-asa": "asa",
+    # --- Cisco FTD ---
     "cisco_ftd": "ftd",
     "cisco-ftd": "ftd",
     "firepower": "ftd",
     "fmc": "ftd",
+    # --- Check Point ---
     "check_point": "checkpoint",
     "check-point": "checkpoint",
     "cp": "checkpoint",
+    # --- Juniper SRX ---
     "juniper_srx": "juniper",
     "juniper-srx": "juniper",
     "srx": "juniper",
-    "junos": "juniper",
+    # --- Cisco IOS / IOS-XE ---
+    "ios-xe": "ios",
+    "iosxe": "ios",
+    "cisco_ios": "ios",
+    "cisco-ios": "ios",
+    "ios_xe": "ios",
+    # --- Cisco IOS-XR ---
+    "ios-xr": "iosxr",
+    "ios_xr": "iosxr",
+    "cisco_iosxr": "iosxr",
+    "cisco-iosxr": "iosxr",
+    "xr": "iosxr",
+    # --- Juniper Junos router firewall filters (not SRX) ---
+    "junos_filter": "junos",
+    "junos-filter": "junos",
+    "juniper_filter": "junos",
+    "juniper-filter": "junos",
+    "mx": "junos",
+    "ptx": "junos",
+    "qfx": "junos",
+    # --- Nokia SR OS ---
+    "sr-os": "sros",
+    "sr_os": "sros",
+    "nokia": "sros",
+    "nokia_sros": "sros",
+    "nokia-sros": "sros",
+    "md-cli": "sros",
+    "mdcli": "sros",
 }
 
 

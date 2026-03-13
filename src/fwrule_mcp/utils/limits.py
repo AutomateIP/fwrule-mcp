@@ -96,6 +96,14 @@ ANALYSIS_TIMEOUT: int = int(ANALYSIS_TIMEOUT_SECONDS)
 # Canonical list of supported vendor identifiers.
 # This list is the single source of truth — models/request.py and
 # utils/validation.py both reference this.
-SUPPORTED_VENDORS: frozenset[str] = frozenset(
-    {"panos", "asa", "ftd", "checkpoint", "juniper"}
-)
+SUPPORTED_VENDORS: frozenset[str] = frozenset({
+    "panos",
+    "asa",
+    "ftd",
+    "checkpoint",
+    "juniper",
+    "ios",
+    "iosxr",
+    "junos",
+    "sros",
+})

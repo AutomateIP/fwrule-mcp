@@ -315,8 +315,9 @@ def test_malformed_ftd_json():
 
 
 def test_list_supported_vendors():
-    """list_supported_vendors should return all 5 vendors."""
-    result = list_supported_vendors()
+    """list_supported_vendors should return all supported vendors."""
+    raw = list_supported_vendors()
+    result = json.loads(raw) if isinstance(raw, str) else raw
     assert "vendors" in result
     vendor_ids = {v["id"] for v in result["vendors"]}
     assert "panos" in vendor_ids
@@ -324,12 +325,18 @@ def test_list_supported_vendors():
     assert "ftd" in vendor_ids
     assert "checkpoint" in vendor_ids
     assert "juniper" in vendor_ids
-    assert len(vendor_ids) == 5
+    # New vendors added in v2
+    assert "ios" in vendor_ids
+    assert "iosxr" in vendor_ids
+    assert "junos" in vendor_ids
+    assert "sros" in vendor_ids
+    assert len(vendor_ids) == 9
 
 
 def test_list_supported_vendors_has_required_fields():
     """Each vendor entry must have id, name, format, versions."""
-    result = list_supported_vendors()
+    raw = list_supported_vendors()
+    result = json.loads(raw) if isinstance(raw, str) else raw
     for vendor in result["vendors"]:
         assert "id" in vendor
         assert "name" in vendor

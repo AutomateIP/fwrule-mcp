@@ -75,6 +75,14 @@ ACTION_MAP: dict[str, Action] = {
     "deny": Action.DENY,            # duplicate
     "ipsec": Action.PERMIT,
     "ssl-vpn": Action.PERMIT,
+    # --- Juniper Junos router firewall filters (family inet filter) ---
+    # (accept already mapped above via Check Point)
+    # discard already mapped above
+    # reject already mapped above
+    # --- Nokia SR OS MD-CLI ip-filter ---
+    # accept already mapped above
+    # drop already mapped above
+    # reject already mapped above
     # --- Generic / catch-all synonyms ---
     "pass": Action.PERMIT,
     "forward": Action.PERMIT,
@@ -82,6 +90,8 @@ ACTION_MAP: dict[str, Action] = {
     "block_all": Action.DENY,
     "log_only": Action.LOG_ONLY,
     "unknown": Action.UNKNOWN,
+    # --- Cisco IOS / IOS-XE / IOS-XR ---
+    # permit and deny already mapped above
 }
 
 

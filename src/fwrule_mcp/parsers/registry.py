@@ -213,6 +213,10 @@ def _auto_import_vendors() -> None:
         "fwrule_mcp.parsers.vendors.ftd",
         "fwrule_mcp.parsers.vendors.checkpoint",
         "fwrule_mcp.parsers.vendors.juniper",
+        "fwrule_mcp.parsers.vendors.ios",
+        "fwrule_mcp.parsers.vendors.iosxr",
+        "fwrule_mcp.parsers.vendors.junos",
+        "fwrule_mcp.parsers.vendors.sros",
     ]
     for pkg in vendor_packages:
         try:

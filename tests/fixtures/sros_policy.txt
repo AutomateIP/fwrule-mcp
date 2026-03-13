@@ -1,0 +1,100 @@
+# Nokia SR OS MD-CLI Hierarchical Configuration
+# Format: info hierarchical (braced/indented)
+# Device: pe-router-sros-01
+# TiMOS-B-21.10.R2
+
+configure {
+    filter {
+        match-list {
+            ip-prefix-list "WEB_SERVERS" {
+                prefix 10.1.1.0/24
+            }
+            ip-prefix-list "DB_SERVERS" {
+                prefix 10.2.1.0/24
+            }
+            ip-prefix-list "APP_SERVERS" {
+                prefix 10.3.1.0/24
+            }
+            ip-prefix-list "MGMT_NET" {
+                prefix 10.0.0.0/24
+            }
+        }
+        ip-filter "OUTSIDE_FILTER" {
+            default-action drop
+            entry 10 {
+                match {
+                    protocol tcp
+                    dst-ip 10.1.1.0/24
+                    dst-port {
+                        eq 80
+                    }
+                }
+                action {
+                    accept
+                }
+            }
+            entry 20 {
+                match {
+                    protocol tcp
+                    dst-ip 10.1.1.0/24
+                    dst-port {
+                        eq 443
+                    }
+                }
+                action {
+                    accept
+                }
+            }
+            entry 30 {
+                match {
+                    protocol tcp
+                    src-ip 10.3.1.0/24
+                    dst-ip 10.2.1.0/24
+                    dst-port {
+                        eq 3306
+                    }
+                }
+                action {
+                    accept
+                }
+            }
+            entry 40 {
+                match {
+                    protocol tcp
+                    src-ip 10.0.0.0/24
+                    dst-port {
+                        eq 22
+                    }
+                }
+                action {
+                    accept
+                }
+            }
+            entry 50 {
+                match {
+                    protocol tcp
+                    src-ip 10.3.1.0/24
+                    dst-ip 10.2.1.0/24
+                    dst-port {
+                        range 8080 8089
+                    }
+                }
+                action {
+                    accept
+                }
+            }
+            entry 60 {
+                match {
+                    protocol tcp
+                    dst-ip 10.2.1.0/24
+                    dst-port {
+                        eq 3306
+                    }
+                }
+                action {
+                    drop
+                }
+            }
+        }
+    }
+}

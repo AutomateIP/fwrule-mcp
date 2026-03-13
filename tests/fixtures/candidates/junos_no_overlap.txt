@@ -1,0 +1,5 @@
+set firewall family inet filter CANDIDATE term rule1 from protocol tcp
+set firewall family inet filter CANDIDATE term rule1 from source-address 172.16.0.0/16
+set firewall family inet filter CANDIDATE term rule1 from destination-address 192.168.200.0/24
+set firewall family inet filter CANDIDATE term rule1 from destination-port 5432
+set firewall family inet filter CANDIDATE term rule1 then accept

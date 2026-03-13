@@ -1,0 +1,19 @@
+configure {
+    filter {
+        ip-filter "CANDIDATE" {
+            entry 10 {
+                match {
+                    protocol tcp
+                    src-ip 172.16.0.0/16
+                    dst-ip 192.168.200.0/24
+                    dst-port {
+                        eq 5432
+                    }
+                }
+                action {
+                    accept
+                }
+            }
+        }
+    }
+}

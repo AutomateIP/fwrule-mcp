@@ -1,0 +1,49 @@
+# Juniper Junos Router Firewall Filter Configuration
+# Format: set commands (show configuration | display set)
+# Device: mx-router-01.corp.example.com
+
+# ============================================================
+# Prefix Lists (policy-options)
+# ============================================================
+set policy-options prefix-list WEB_SERVERS 10.1.1.0/24
+set policy-options prefix-list DB_SERVERS 10.2.1.0/24
+set policy-options prefix-list APP_SERVERS 10.3.1.0/24
+set policy-options prefix-list MGMT_NET 10.0.0.0/24
+
+# ============================================================
+# Firewall Family Inet Filter — OUTSIDE_FILTER
+# ============================================================
+
+# Term 1: allow-web — permit HTTP/HTTPS from any to web servers
+set firewall family inet filter OUTSIDE_FILTER term allow-web from protocol tcp
+set firewall family inet filter OUTSIDE_FILTER term allow-web from destination-address 10.1.1.0/24
+set firewall family inet filter OUTSIDE_FILTER term allow-web from destination-port http
+set firewall family inet filter OUTSIDE_FILTER term allow-web from destination-port https
+set firewall family inet filter OUTSIDE_FILTER term allow-web then accept
+
+# Term 2: allow-db — permit MySQL from app servers to DB servers
+set firewall family inet filter OUTSIDE_FILTER term allow-db from protocol tcp
+set firewall family inet filter OUTSIDE_FILTER term allow-db from source-address 10.3.1.0/24
+set firewall family inet filter OUTSIDE_FILTER term allow-db from destination-address 10.2.1.0/24
+set firewall family inet filter OUTSIDE_FILTER term allow-db from destination-port 3306
+set firewall family inet filter OUTSIDE_FILTER term allow-db then accept
+
+# Term 3: allow-mgmt — permit SSH from management to any
+set firewall family inet filter OUTSIDE_FILTER term allow-mgmt from protocol tcp
+set firewall family inet filter OUTSIDE_FILTER term allow-mgmt from source-address 10.0.0.0/24
+set firewall family inet filter OUTSIDE_FILTER term allow-mgmt from destination-port ssh
+set firewall family inet filter OUTSIDE_FILTER term allow-mgmt then accept
+
+# Term 4: allow-app-ports — permit app service range from app to DB
+set firewall family inet filter OUTSIDE_FILTER term allow-app-ports from protocol tcp
+set firewall family inet filter OUTSIDE_FILTER term allow-app-ports from source-address 10.3.1.0/24
+set firewall family inet filter OUTSIDE_FILTER term allow-app-ports from destination-address 10.2.1.0/24
+set firewall family inet filter OUTSIDE_FILTER term allow-app-ports from destination-port 8080-8089
+set firewall family inet filter OUTSIDE_FILTER term allow-app-ports then accept
+
+# Term 5: deny-db-external — deny MySQL from any to DB servers
+set firewall family inet filter OUTSIDE_FILTER term deny-db-external from protocol tcp
+set firewall family inet filter OUTSIDE_FILTER term deny-db-external from destination-address 10.2.1.0/24
+set firewall family inet filter OUTSIDE_FILTER term deny-db-external from destination-port 3306
+set firewall family inet filter OUTSIDE_FILTER term deny-db-external then discard
+

@@ -46,7 +46,9 @@ mcp = FastMCP(
     instructions=(
         "Analyzes whether a candidate firewall rule overlaps with, duplicates, "
         "shadows, or conflicts with an existing policy ruleset. "
-        "Supports Palo Alto PAN-OS, Cisco ASA, Cisco FTD, Check Point, and Juniper SRX."
+        "Supports Palo Alto PAN-OS, Cisco ASA, Cisco FTD, Cisco IOS/IOS-XE, "
+        "Cisco IOS-XR, Check Point, Juniper SRX, Juniper Junos router filters, "
+        "and Nokia SR OS."
     ),
 )
 
@@ -320,7 +322,9 @@ def _run_pipeline(
         "Analyze whether a candidate firewall rule overlaps with an existing ruleset. "
         "Detects exact duplicates, shadowed rules, action conflicts, and partial overlaps. "
         "Supports Palo Alto PAN-OS (XML), Cisco ASA (text), Cisco FTD (JSON), "
-        "Check Point (JSON), and Juniper SRX (set format)."
+        "Cisco IOS/IOS-XE (text), Cisco IOS-XR (text), Check Point (JSON), "
+        "Juniper SRX (set format), Juniper Junos router filters (set format), "
+        "and Nokia SR OS MD-CLI (info/flat format)."
     ),
 )
 def analyze_firewall_rule_overlap(
@@ -340,8 +344,12 @@ def analyze_firewall_rule_overlap(
             - "panos"       — Palo Alto PAN-OS / Panorama (XML format)
             - "asa"         — Cisco ASA (show running-config text)
             - "ftd"         — Cisco FTD (JSON export from FMC)
+            - "ios"         — Cisco IOS / IOS-XE (show running-config text)
+            - "iosxr"       — Cisco IOS-XR (show running-config text)
             - "checkpoint"  — Check Point (show-access-rulebase JSON)
             - "juniper"     — Juniper SRX (set command format)
+            - "junos"       — Juniper Junos router firewall filters (set format)
+            - "sros"        — Nokia SR OS MD-CLI (info or flat /configure format)
 
         ruleset_payload:
             The complete existing firewall policy in vendor-native format.
@@ -457,6 +465,7 @@ def list_supported_vendors() -> str:
             {
                 "id": "panos",
                 "name": "Palo Alto Networks PAN-OS / Panorama",
+                "aliases": ["paloalto", "palo-alto", "pan-os", "panorama"],
                 "format": "XML configuration export (show config running, or Panorama export)",
                 "versions": "9.x - 11.x",
                 "notes": (
@@ -468,6 +477,7 @@ def list_supported_vendors() -> str:
             {
                 "id": "asa",
                 "name": "Cisco ASA",
+                "aliases": ["cisco-asa", "cisco_asa"],
                 "format": "show running-config text output",
                 "versions": "9.x+",
                 "notes": (
@@ -479,6 +489,7 @@ def list_supported_vendors() -> str:
             {
                 "id": "ftd",
                 "name": "Cisco Firepower Threat Defense (FTD)",
+                "aliases": ["cisco-ftd", "firepower", "fmc"],
                 "format": "JSON export from Firepower Management Center (FMC)",
                 "versions": "6.x - 7.x",
                 "notes": (
@@ -487,8 +498,34 @@ def list_supported_vendors() -> str:
                 ),
             },
             {
+                "id": "ios",
+                "name": "Cisco IOS / IOS-XE",
+                "aliases": ["ios-xe", "iosxe", "cisco-ios", "cisco_ios", "ios_xe"],
+                "format": "show running-config text output",
+                "versions": "12.x, 15.x, 16.x, 17.x (IOS); 3.x, 16.x, 17.x (IOS-XE)",
+                "notes": (
+                    "Handles standard and extended numbered ACLs (access-list <num>) "
+                    "and named ACLs (ip access-list extended|standard <name>). "
+                    "IOS-XE object-group network and object-group service are also supported. "
+                    "Wildcard masks are automatically converted to CIDR notation."
+                ),
+            },
+            {
+                "id": "iosxr",
+                "name": "Cisco IOS-XR",
+                "aliases": ["ios-xr", "ios_xr", "cisco-iosxr", "xr"],
+                "format": "show running-config text output",
+                "versions": "6.x, 7.x+",
+                "notes": (
+                    "Handles IPv4 and IPv6 named ACLs with sequence-numbered entries. "
+                    "Uses 'ipv4 access-list' / 'ipv6 access-list' syntax and CIDR notation. "
+                    "object-group network (ipv4/ipv6) and object-group port are supported."
+                ),
+            },
+            {
                 "id": "checkpoint",
                 "name": "Check Point",
+                "aliases": ["check-point", "check_point", "cp"],
                 "format": "JSON package export (show-access-rulebase API response)",
                 "versions": "R80.x - R82.x",
                 "notes": (
@@ -499,13 +536,49 @@ def list_supported_vendors() -> str:
             },
             {
                 "id": "juniper",
-                "name": "Juniper SRX",
+                "name": "Juniper SRX (zone-based security policies)",
+                "aliases": ["srx", "juniper-srx", "juniper_srx"],
                 "format": "set command format (show configuration | display set)",
                 "versions": "19.x+",
                 "notes": (
                     "Use 'show configuration security policies | display set' output. "
                     "Address book entries and application definitions are extracted "
-                    "from the same payload."
+                    "from the same payload. For Junos router firewall filters (MX/PTX/QFX), "
+                    "use the 'junos' vendor instead."
+                ),
+            },
+            {
+                "id": "junos",
+                "name": "Juniper Junos router firewall filters (MX / PTX / QFX)",
+                "aliases": [
+                    "junos-filter", "junos_filter", "juniper-filter",
+                    "juniper_filter", "mx", "ptx", "qfx",
+                ],
+                "format": "set command format (show configuration | display set)",
+                "versions": "18.x+",
+                "notes": (
+                    "Handles 'firewall family inet filter <name> term <name>' constructs. "
+                    "Supports source/destination address, protocol, port matching, "
+                    "and policy-options prefix-list references. "
+                    "Actions: accept (→permit), discard (→deny), reject. "
+                    "This is DISTINCT from Juniper SRX security policies — use "
+                    "'juniper' for SRX zone-based policies."
+                ),
+            },
+            {
+                "id": "sros",
+                "name": "Nokia SR OS",
+                "aliases": ["sr-os", "sr_os", "nokia", "nokia-sros", "md-cli", "mdcli"],
+                "format": (
+                    "MD-CLI hierarchical info output or flat /configure command format"
+                ),
+                "versions": "20.x+",
+                "notes": (
+                    "Supports ip-filter entry definitions with match + action blocks. "
+                    "Both hierarchical (braced info format) and flat "
+                    "(/configure filter ip-filter ...) command formats are auto-detected. "
+                    "match-list ip-prefix-list definitions are extracted as address groups. "
+                    "Actions: accept (→permit), drop (→deny), reject."
                 ),
             },
         ]

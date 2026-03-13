@@ -377,3 +377,275 @@ class TestJuniperMockPayloads:
         assert not result["overlap_exists"], (
             f"Expected overlap_exists=False for disjoint rule, findings: {_overlap_types(result)}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Cisco IOS Tests
+# ---------------------------------------------------------------------------
+
+
+class TestIOSMockPayloads:
+    """Test realistic IOS/IOS-XE policy with five candidate scenarios."""
+
+    VENDOR = "ios"
+    POLICY = "ios_policy.conf"
+
+    def test_parse_succeeds(self):
+        """Policy parses without error before any candidate testing."""
+        result = _run(self.VENDOR, self.POLICY, "ios_duplicate.conf")
+        assert result["success"], f"Pipeline failed: {result.get('error')}"
+
+    def test_duplicate(self):
+        """Exact copy of the allow-web rule → exact_duplicate finding."""
+        result = _run(self.VENDOR, self.POLICY, "ios_duplicate.conf")
+        assert result["success"], f"Pipeline failed: {result.get('error')}"
+        assert result["overlap_exists"], "Expected overlap_exists=True for duplicate"
+        types = _overlap_types(result)
+        assert "exact_duplicate" in types, (
+            f"Expected 'exact_duplicate' in findings, got: {types}"
+        )
+
+    def test_shadowed(self):
+        """Host-specific rule inside broader /24 rule → shadowed/subset finding."""
+        result = _run(self.VENDOR, self.POLICY, "ios_shadowed.conf")
+        assert result["success"], f"Pipeline failed: {result.get('error')}"
+        assert result["overlap_exists"], "Expected overlap_exists=True for shadowed rule"
+        types = _overlap_types(result)
+        assert any(t in ("shadowed", "subset") for t in types), (
+            f"Expected 'shadowed' or 'subset' in findings, got: {types}"
+        )
+
+    def test_conflict(self):
+        """Same match criteria, deny vs permit → conflict finding."""
+        result = _run(self.VENDOR, self.POLICY, "ios_conflict.conf")
+        assert result["success"], f"Pipeline failed: {result.get('error')}"
+        assert result["overlap_exists"], "Expected overlap_exists=True for conflict"
+        types = _overlap_types(result)
+        assert "conflict" in types, (
+            f"Expected 'conflict' in findings, got: {types}"
+        )
+
+    def test_partial_overlap(self):
+        """Broader /16 destination overlapping existing /24 allow-web rule → overlap."""
+        result = _run(self.VENDOR, self.POLICY, "ios_partial.conf")
+        assert result["success"], f"Pipeline failed: {result.get('error')}"
+        assert result["overlap_exists"], "Expected overlap_exists=True for partial overlap"
+        types = _overlap_types(result)
+        assert any(t in ("partial_overlap", "superset", "shadows_existing", "conflict") for t in types), (
+            f"Expected overlap finding, got: {types}"
+        )
+
+    def test_no_overlap(self):
+        """Completely different subnet and port → no findings."""
+        result = _run(self.VENDOR, self.POLICY, "ios_no_overlap.conf")
+        assert result["success"], f"Pipeline failed: {result.get('error')}"
+        assert not result["overlap_exists"], (
+            f"Expected overlap_exists=False for disjoint rule, findings: {_overlap_types(result)}"
+        )
+        assert result["findings"] == [], (
+            f"Expected empty findings for disjoint rule, got: {result['findings']}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Cisco IOS-XR Tests
+# ---------------------------------------------------------------------------
+
+
+class TestIOSXRMockPayloads:
+    """Test realistic IOS-XR policy with five candidate scenarios."""
+
+    VENDOR = "iosxr"
+    POLICY = "iosxr_policy.conf"
+
+    def test_parse_succeeds(self):
+        """Policy parses without error before any candidate testing."""
+        result = _run(self.VENDOR, self.POLICY, "iosxr_duplicate.conf")
+        assert result["success"], f"Pipeline failed: {result.get('error')}"
+
+    def test_duplicate(self):
+        """Exact copy of the allow-web rule → exact_duplicate finding."""
+        result = _run(self.VENDOR, self.POLICY, "iosxr_duplicate.conf")
+        assert result["success"], f"Pipeline failed: {result.get('error')}"
+        assert result["overlap_exists"], "Expected overlap_exists=True for duplicate"
+        types = _overlap_types(result)
+        assert "exact_duplicate" in types, (
+            f"Expected 'exact_duplicate' in findings, got: {types}"
+        )
+
+    def test_shadowed(self):
+        """Host-specific rule inside broader /24 rule → shadowed/subset finding."""
+        result = _run(self.VENDOR, self.POLICY, "iosxr_shadowed.conf")
+        assert result["success"], f"Pipeline failed: {result.get('error')}"
+        assert result["overlap_exists"], "Expected overlap_exists=True for shadowed rule"
+        types = _overlap_types(result)
+        assert any(t in ("shadowed", "subset") for t in types), (
+            f"Expected 'shadowed' or 'subset' in findings, got: {types}"
+        )
+
+    def test_conflict(self):
+        """Same match criteria, deny vs permit → conflict finding."""
+        result = _run(self.VENDOR, self.POLICY, "iosxr_conflict.conf")
+        assert result["success"], f"Pipeline failed: {result.get('error')}"
+        assert result["overlap_exists"], "Expected overlap_exists=True for conflict"
+        types = _overlap_types(result)
+        assert "conflict" in types, (
+            f"Expected 'conflict' in findings, got: {types}"
+        )
+
+    def test_partial_overlap(self):
+        """Broader /16 destination overlapping existing /24 rule → overlap."""
+        result = _run(self.VENDOR, self.POLICY, "iosxr_partial.conf")
+        assert result["success"], f"Pipeline failed: {result.get('error')}"
+        assert result["overlap_exists"], "Expected overlap_exists=True for partial overlap"
+        types = _overlap_types(result)
+        assert any(t in ("partial_overlap", "superset", "shadows_existing", "conflict") for t in types), (
+            f"Expected overlap finding, got: {types}"
+        )
+
+    def test_no_overlap(self):
+        """Completely different subnet and port → no findings."""
+        result = _run(self.VENDOR, self.POLICY, "iosxr_no_overlap.conf")
+        assert result["success"], f"Pipeline failed: {result.get('error')}"
+        assert not result["overlap_exists"], (
+            f"Expected overlap_exists=False for disjoint rule, findings: {_overlap_types(result)}"
+        )
+        assert result["findings"] == [], (
+            f"Expected empty findings for disjoint rule, got: {result['findings']}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Juniper Junos Router Filter Tests
+# ---------------------------------------------------------------------------
+
+
+class TestJunosMockPayloads:
+    """Test realistic Junos router firewall filter with five candidate scenarios."""
+
+    VENDOR = "junos"
+    POLICY = "junos_policy.txt"
+
+    def test_parse_succeeds(self):
+        """Policy parses without error before any candidate testing."""
+        result = _run(self.VENDOR, self.POLICY, "junos_duplicate.txt")
+        assert result["success"], f"Pipeline failed: {result.get('error')}"
+
+    def test_duplicate(self):
+        """Exact copy of the allow-web term → exact_duplicate finding."""
+        result = _run(self.VENDOR, self.POLICY, "junos_duplicate.txt")
+        assert result["success"], f"Pipeline failed: {result.get('error')}"
+        assert result["overlap_exists"], "Expected overlap_exists=True for duplicate"
+        types = _overlap_types(result)
+        assert "exact_duplicate" in types, (
+            f"Expected 'exact_duplicate' in findings, got: {types}"
+        )
+
+    def test_shadowed(self):
+        """Single-host /32 inside /24 allow-web term → shadowed/subset finding."""
+        result = _run(self.VENDOR, self.POLICY, "junos_shadowed.txt")
+        assert result["success"], f"Pipeline failed: {result.get('error')}"
+        assert result["overlap_exists"], "Expected overlap_exists=True for shadowed rule"
+        types = _overlap_types(result)
+        assert any(t in ("shadowed", "subset") for t in types), (
+            f"Expected 'shadowed' or 'subset' in findings, got: {types}"
+        )
+
+    def test_conflict(self):
+        """discard vs accept for same match → conflict finding."""
+        result = _run(self.VENDOR, self.POLICY, "junos_conflict.txt")
+        assert result["success"], f"Pipeline failed: {result.get('error')}"
+        assert result["overlap_exists"], "Expected overlap_exists=True for conflict"
+        types = _overlap_types(result)
+        assert "conflict" in types, (
+            f"Expected 'conflict' in findings, got: {types}"
+        )
+
+    def test_partial_overlap(self):
+        """Broader /16 destination overlapping existing /24 allow-web term → overlap."""
+        result = _run(self.VENDOR, self.POLICY, "junos_partial.txt")
+        assert result["success"], f"Pipeline failed: {result.get('error')}"
+        assert result["overlap_exists"], "Expected overlap_exists=True for partial overlap"
+        types = _overlap_types(result)
+        assert any(t in ("partial_overlap", "superset", "shadows_existing", "conflict") for t in types), (
+            f"Expected overlap finding, got: {types}"
+        )
+
+    def test_no_overlap(self):
+        """Completely disjoint subnets and port → no findings."""
+        result = _run(self.VENDOR, self.POLICY, "junos_no_overlap.txt")
+        assert result["success"], f"Pipeline failed: {result.get('error')}"
+        assert not result["overlap_exists"], (
+            f"Expected overlap_exists=False for disjoint rule, findings: {_overlap_types(result)}"
+        )
+        assert result["findings"] == [], (
+            f"Expected empty findings for disjoint rule, got: {result['findings']}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Nokia SR OS Tests
+# ---------------------------------------------------------------------------
+
+
+class TestSROSMockPayloads:
+    """Test realistic Nokia SR OS MD-CLI policy with five candidate scenarios."""
+
+    VENDOR = "sros"
+    POLICY = "sros_policy.txt"
+
+    def test_parse_succeeds(self):
+        """Policy parses without error before any candidate testing."""
+        result = _run(self.VENDOR, self.POLICY, "sros_duplicate.txt")
+        assert result["success"], f"Pipeline failed: {result.get('error')}"
+
+    def test_duplicate(self):
+        """Exact copy of entry 10 (allow HTTP to web servers) → exact_duplicate finding."""
+        result = _run(self.VENDOR, self.POLICY, "sros_duplicate.txt")
+        assert result["success"], f"Pipeline failed: {result.get('error')}"
+        assert result["overlap_exists"], "Expected overlap_exists=True for duplicate"
+        types = _overlap_types(result)
+        assert "exact_duplicate" in types, (
+            f"Expected 'exact_duplicate' in findings, got: {types}"
+        )
+
+    def test_shadowed(self):
+        """Single-host /32 inside /24 accept entry → shadowed/subset finding."""
+        result = _run(self.VENDOR, self.POLICY, "sros_shadowed.txt")
+        assert result["success"], f"Pipeline failed: {result.get('error')}"
+        assert result["overlap_exists"], "Expected overlap_exists=True for shadowed rule"
+        types = _overlap_types(result)
+        assert any(t in ("shadowed", "subset") for t in types), (
+            f"Expected 'shadowed' or 'subset' in findings, got: {types}"
+        )
+
+    def test_conflict(self):
+        """drop vs accept for same dst match → conflict finding."""
+        result = _run(self.VENDOR, self.POLICY, "sros_conflict.txt")
+        assert result["success"], f"Pipeline failed: {result.get('error')}"
+        assert result["overlap_exists"], "Expected overlap_exists=True for conflict"
+        types = _overlap_types(result)
+        assert "conflict" in types, (
+            f"Expected 'conflict' in findings, got: {types}"
+        )
+
+    def test_partial_overlap(self):
+        """Broader /16 destination overlapping existing /24 accept entry → overlap."""
+        result = _run(self.VENDOR, self.POLICY, "sros_partial.txt")
+        assert result["success"], f"Pipeline failed: {result.get('error')}"
+        assert result["overlap_exists"], "Expected overlap_exists=True for partial overlap"
+        types = _overlap_types(result)
+        assert any(t in ("partial_overlap", "superset", "shadows_existing", "conflict") for t in types), (
+            f"Expected overlap finding, got: {types}"
+        )
+
+    def test_no_overlap(self):
+        """Completely disjoint subnets and port → no findings."""
+        result = _run(self.VENDOR, self.POLICY, "sros_no_overlap.txt")
+        assert result["success"], f"Pipeline failed: {result.get('error')}"
+        assert not result["overlap_exists"], (
+            f"Expected overlap_exists=False for disjoint rule, findings: {_overlap_types(result)}"
+        )
+        assert result["findings"] == [], (
+            f"Expected empty findings for disjoint rule, got: {result['findings']}"
+        )
