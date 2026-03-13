@@ -334,14 +334,13 @@ def test_list_supported_vendors():
 
 
 def test_list_supported_vendors_has_required_fields():
-    """Each vendor entry must have id, name, format, versions."""
+    """Each vendor entry must have id, aliases, format."""
     raw = list_supported_vendors()
     result = json.loads(raw) if isinstance(raw, str) else raw
     for vendor in result["vendors"]:
         assert "id" in vendor
-        assert "name" in vendor
+        assert "aliases" in vendor
         assert "format" in vendor
-        assert "versions" in vendor
 
 
 def test_analysis_response_structure():

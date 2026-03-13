@@ -525,74 +525,17 @@ def list_supported_vendors() -> str:
     """List all supported firewall vendors."""
     return json.dumps({
         "vendors": [
-            {
-                "id": "panos",
-                "name": "Palo Alto Networks PAN-OS / Panorama",
-                "aliases": ["paloalto", "palo-alto", "pan-os", "panorama"],
-                "format": "XML configuration export (show config running, or Panorama export)",
-                "versions": "9.x - 11.x",
-            },
-            {
-                "id": "asa",
-                "name": "Cisco ASA",
-                "aliases": ["cisco-asa", "cisco_asa"],
-                "format": "show running-config text output",
-                "versions": "9.x+",
-            },
-            {
-                "id": "ftd",
-                "name": "Cisco Firepower Threat Defense (FTD)",
-                "aliases": ["cisco-ftd", "firepower", "fmc"],
-                "format": "JSON export from Firepower Management Center (FMC)",
-                "versions": "6.x - 7.x",
-            },
-            {
-                "id": "ios",
-                "name": "Cisco IOS / IOS-XE",
-                "aliases": ["ios-xe", "iosxe", "cisco-ios", "cisco_ios", "ios_xe"],
-                "format": "show running-config text output",
-                "versions": "12.x - 17.x",
-            },
-            {
-                "id": "iosxr",
-                "name": "Cisco IOS-XR",
-                "aliases": ["ios-xr", "ios_xr", "cisco-iosxr", "xr"],
-                "format": "show running-config text output",
-                "versions": "6.x, 7.x+",
-            },
-            {
-                "id": "checkpoint",
-                "name": "Check Point",
-                "aliases": ["check-point", "check_point", "cp"],
-                "format": "JSON package export (show-access-rulebase API response)",
-                "versions": "R80.x - R82.x",
-            },
-            {
-                "id": "juniper",
-                "name": "Juniper SRX (zone-based security policies)",
-                "aliases": ["srx", "juniper-srx", "juniper_srx"],
-                "format": "set command format (show configuration | display set)",
-                "versions": "19.x+",
-            },
-            {
-                "id": "junos",
-                "name": "Juniper Junos router firewall filters (MX / PTX / QFX)",
-                "aliases": ["junos-filter", "junos_filter", "juniper-filter", "mx", "ptx", "qfx"],
-                "format": "set command format (show configuration | display set)",
-                "versions": "18.x+",
-            },
-            {
-                "id": "sros",
-                "name": "Nokia SR OS",
-                "aliases": ["sr-os", "sr_os", "nokia", "nokia-sros", "md-cli", "mdcli"],
-                "format": "MD-CLI hierarchical info output or flat /configure command format",
-                "versions": "20.x+",
-            },
+            {"id": "panos", "aliases": ["paloalto", "panorama"], "format": "xml"},
+            {"id": "asa", "aliases": ["cisco-asa"], "format": "text"},
+            {"id": "ftd", "aliases": ["firepower", "fmc"], "format": "json"},
+            {"id": "ios", "aliases": ["iosxe", "cisco-ios"], "format": "text"},
+            {"id": "iosxr", "aliases": ["ios-xr", "xr"], "format": "text"},
+            {"id": "checkpoint", "aliases": ["cp", "check-point"], "format": "json"},
+            {"id": "juniper", "aliases": ["srx"], "format": "set-commands"},
+            {"id": "junos", "aliases": ["mx", "ptx", "qfx"], "format": "set-commands"},
+            {"id": "sros", "aliases": ["nokia", "sr-os", "md-cli"], "format": "md-cli"},
         ],
-        "note": (
-            "You can also bypass vendor parsers entirely by passing pre-normalized JSON "
-            "to analyze_firewall_rule_overlap via the existing_rules + candidate_rule parameters."
-        ),
+        "normalized_input": "Use existing_rules + candidate_rule params to bypass parsers.",
     })
 
 
