@@ -1,29 +1,18 @@
 """
 MCP Server entry point — FWRule MCP — Firewall Rule Analyzer.
 
-This module registers the ``analyze_firewall_rule_overlap`` tool with FastMCP
-and wires the request → parse → normalize → analyze → respond pipeline.
+Three tools:
+  1. analyze_firewall_rule_overlap — Hybrid: accepts vendor-native OR normalized JSON
+  2. parse_policy — Parse vendor-native config and return normalized JSON schema
+  3. list_supported_vendors — List supported vendors and formats
 
-Pipeline per request:
-  1. Validate inputs (vendor, payload sizes, context JSON)
-  2. Get the appropriate VendorParser from the registry
-  3. Parse the existing policy → ParsedPolicy
-  4. Parse the candidate rule   → VendorRule
-  5. Normalize both             → list[NormalizedRule], NormalizedCandidate
-  6. Run the analysis engine    → AnalysisResult
-  7. Generate the response      → AnalysisResponse
-  8. Return as a dict (FastMCP serializes to JSON)
+Two analysis paths (selected automatically by which parameters are provided):
+  Path A (vendor parsers):  vendor + ruleset_payload + candidate_rule_payload
+  Path B (normalized JSON): existing_rules + candidate_rule
 
 Error handling:
-  - ValidationError, UnsupportedVendorError, and parse errors are caught at
-    each stage and returned as structured error dicts (not server crashes).
-  - Unexpected exceptions are caught at the top level and returned as
-    internal_error responses with no payload content in the message.
-
-Security notes:
-  - Payload content is never logged — only metadata (vendor, size, rule counts).
-  - XML payloads are validated with defusedxml before parsing.
-  - Payload size limits are enforced before any parsing begins.
+  - All errors are returned as structured dicts (not server crashes).
+  - Payload content is never logged — only metadata.
 """
 
 from __future__ import annotations
@@ -46,15 +35,14 @@ mcp = FastMCP(
     instructions=(
         "Analyzes whether a candidate firewall rule overlaps with, duplicates, "
         "shadows, or conflicts with an existing policy ruleset. "
-        "Supports Palo Alto PAN-OS, Cisco ASA, Cisco FTD, Cisco IOS/IOS-XE, "
-        "Cisco IOS-XR, Check Point, Juniper SRX, Juniper Junos router filters, "
-        "and Nokia SR OS."
+        "Accepts vendor-native configs (9 vendors) OR pre-normalized JSON rules. "
+        "Use parse_policy to inspect what the built-in parsers extract before analysis."
     ),
 )
 
 
 # ---------------------------------------------------------------------------
-# Internal pipeline helpers
+# Internal helpers
 # ---------------------------------------------------------------------------
 
 
@@ -64,13 +52,7 @@ def _build_error_response(
     field: Optional[str] = None,
     duration_ms: float = 0.0,
 ) -> dict:
-    """
-    Build a structured error response dict.
-
-    Returns a dict rather than raising so that the MCP tool always returns a
-    value (error responses are still valid tool results — they just convey
-    failure).
-    """
+    """Build a structured error response dict."""
     result: dict = {
         "success": False,
         "error": {
@@ -86,7 +68,63 @@ def _build_error_response(
     return result
 
 
-def _run_pipeline(
+def _run_analysis(
+    normalized_rules: list,
+    normalized_candidate,
+    candidate_position: Optional[int],
+    vendor: str,
+    start_time: float,
+) -> dict:
+    """
+    Run the analysis engine on already-normalized rules and return the result dict.
+
+    Shared by both Path A (vendor parser) and Path B (normalized JSON).
+    """
+    from fwrule_mcp.analysis.engine import OverlapAnalysisEngine
+    from fwrule_mcp.results.generator import ResultGenerator
+    from fwrule_mcp.utils.limits import MAX_RULES_FOR_ANALYSIS
+
+    try:
+        engine = OverlapAnalysisEngine()
+        analysis_result = engine.analyze(
+            existing_rules=normalized_rules,
+            candidate=normalized_candidate,
+            candidate_position=candidate_position,
+            max_rules=MAX_RULES_FOR_ANALYSIS,
+        )
+    except Exception as exc:
+        logger.error("Analysis error: %s", exc, exc_info=True)
+        return _build_error_response(
+            "analysis_error",
+            f"Analysis engine encountered an unexpected error: {exc}",
+            duration_ms=(time.monotonic() - start_time) * 1000,
+        )
+
+    end_time = time.monotonic()
+
+    try:
+        generator = ResultGenerator()
+        response = generator.generate(
+            analysis_result=analysis_result,
+            vendor=vendor,
+            os_version=None,
+            start_time_monotonic=start_time,
+            end_time_monotonic=end_time,
+        )
+    except Exception as exc:
+        logger.error("Result generation error: %s", exc, exc_info=True)
+        return _build_error_response(
+            "result_generation_error",
+            f"Failed to generate the analysis response: {exc}",
+            duration_ms=(end_time - start_time) * 1000,
+        )
+
+    result = response.model_dump(mode="json")
+    result["success"] = True
+    return result
+
+
+def _run_vendor_pipeline(
     vendor: str,
     ruleset_payload: str,
     candidate_rule_payload: str,
@@ -94,22 +132,9 @@ def _run_pipeline(
     context_objects: Optional[str],
     candidate_position: Optional[int],
 ) -> dict:
-    """
-    Execute the full analysis pipeline and return the result as a dict.
-
-    This is the core implementation called by the MCP tool function.  All
-    stages are wrapped in try/except so that errors are returned as structured
-    dicts rather than propagating as uncaught exceptions.
-
-    Returns:
-        Either a full AnalysisResponse dict (with success=True) or an error
-        dict (with success=False).
-    """
+    """Path A: vendor parser pipeline."""
     start_time = time.monotonic()
 
-    # ------------------------------------------------------------------
-    # Stage 1: Input validation
-    # ------------------------------------------------------------------
     from fwrule_mcp.utils.validation import (
         ValidationError,
         validate_vendor,
@@ -119,7 +144,6 @@ def _run_pipeline(
     from fwrule_mcp.utils.limits import (
         MAX_RULESET_PAYLOAD_BYTES,
         MAX_CANDIDATE_PAYLOAD_BYTES,
-        MAX_RULES_FOR_ANALYSIS,
     )
 
     try:
@@ -147,45 +171,19 @@ def _run_pipeline(
             duration_ms=(time.monotonic() - start_time) * 1000,
         )
 
-    # ------------------------------------------------------------------
-    # Stage 2: Parser lookup
-    # ------------------------------------------------------------------
     from fwrule_mcp.parsers.registry import registry, UnsupportedVendorError
 
     try:
         parser = registry.get_parser(vendor, os_version)
     except UnsupportedVendorError as exc:
         return _build_error_response(
-            "unsupported_vendor",
-            str(exc),
+            "unsupported_vendor", str(exc),
             duration_ms=(time.monotonic() - start_time) * 1000,
         )
 
-    parser_id = type(parser).__name__
-
-    logger.info(
-        "Analysis request: vendor=%s os_version=%s parser=%s "
-        "ruleset_bytes=%d candidate_bytes=%d candidate_position=%s",
-        vendor,
-        os_version or "any",
-        parser_id,
-        len(ruleset_payload.encode()),
-        len(candidate_rule_payload.encode()),
-        candidate_position,
-    )
-
-    # ------------------------------------------------------------------
-    # Stage 3: Parse existing policy
-    # ------------------------------------------------------------------
-    from fwrule_mcp.parsers.base import ParsedPolicy
-
     try:
-        parsed_policy: ParsedPolicy = parser.parse_policy(
-            raw_payload=ruleset_payload,
-            context=context_dict,
-        )
+        parsed_policy = parser.parse_policy(raw_payload=ruleset_payload, context=context_dict)
     except Exception as exc:
-        logger.error("Policy parse error (vendor=%s): %s", vendor, exc, exc_info=True)
         return _build_error_response(
             "parse_error",
             f"Failed to parse the existing ruleset for vendor '{vendor}': {exc}",
@@ -193,16 +191,12 @@ def _run_pipeline(
             duration_ms=(time.monotonic() - start_time) * 1000,
         )
 
-    # ------------------------------------------------------------------
-    # Stage 4: Parse candidate rule
-    # ------------------------------------------------------------------
     try:
         vendor_candidate = parser.parse_single_rule(
             raw_rule=candidate_rule_payload,
             object_table=parsed_policy.object_table,
         )
     except Exception as exc:
-        logger.error("Candidate parse error (vendor=%s): %s", vendor, exc, exc_info=True)
         return _build_error_response(
             "parse_error",
             f"Failed to parse the candidate rule for vendor '{vendor}': {exc}",
@@ -210,105 +204,105 @@ def _run_pipeline(
             duration_ms=(time.monotonic() - start_time) * 1000,
         )
 
-    # ------------------------------------------------------------------
-    # Stage 5: Normalize
-    # ------------------------------------------------------------------
     from fwrule_mcp.normalization.normalizer import PolicyNormalizer
+    from fwrule_mcp.normalization.resolver import ObjectResolver
 
     try:
-        from fwrule_mcp.normalization.resolver import ObjectResolver
         normalizer = PolicyNormalizer()
         normalized_rules = normalizer.normalize_policy(parsed_policy)
-        # Build a resolver from the policy's object table so the candidate
-        # can reference the same named objects as the existing policy.
         candidate_resolver = ObjectResolver(parsed_policy.object_table)
-    except Exception as exc:
-        logger.error("Normalization error (vendor=%s): %s", vendor, exc, exc_info=True)
-        return _build_error_response(
-            "normalization_error",
-            f"Failed to normalize the policy rules: {exc}",
-            duration_ms=(time.monotonic() - start_time) * 1000,
-        )
-
-    try:
         normalized_candidate = normalizer.normalize_candidate(
             vendor_rule=vendor_candidate,
             resolver=candidate_resolver,
             intended_position=candidate_position,
         )
     except Exception as exc:
-        logger.error("Candidate normalization error (vendor=%s): %s", vendor, exc, exc_info=True)
         return _build_error_response(
             "normalization_error",
-            f"Failed to normalize the candidate rule: {exc}",
+            f"Failed to normalize the policy rules: {exc}",
             duration_ms=(time.monotonic() - start_time) * 1000,
         )
 
-    logger.info(
-        "Normalization complete: vendor=%s rules=%d candidate_id=%s",
-        vendor,
-        len(normalized_rules),
-        normalized_candidate.rule_id,
+    return _run_analysis(normalized_rules, normalized_candidate, candidate_position, vendor, start_time)
+
+
+def _run_normalized_pipeline(
+    existing_rules_json: str,
+    candidate_rule_json: str,
+    candidate_position: Optional[int],
+) -> dict:
+    """Path B: normalized JSON input pipeline."""
+    start_time = time.monotonic()
+
+    from pydantic import ValidationError as PydanticValidationError
+    from fwrule_mcp.normalization.schema import (
+        RuleInput,
+        rule_input_to_normalized,
+        rule_input_to_candidate,
     )
 
-    # ------------------------------------------------------------------
-    # Stage 6: Analysis
-    # ------------------------------------------------------------------
-    from fwrule_mcp.analysis.engine import OverlapAnalysisEngine
-
+    # Parse and validate existing rules
     try:
-        engine = OverlapAnalysisEngine()
-        analysis_result = engine.analyze(
-            existing_rules=normalized_rules,
-            candidate=normalized_candidate,
-            candidate_position=candidate_position,
-            max_rules=MAX_RULES_FOR_ANALYSIS,
-        )
-    except Exception as exc:
-        logger.error("Analysis error (vendor=%s): %s", vendor, exc, exc_info=True)
+        existing_raw = json.loads(existing_rules_json)
+    except (json.JSONDecodeError, TypeError) as exc:
         return _build_error_response(
-            "analysis_error",
-            f"Analysis engine encountered an unexpected error: {exc}",
+            "invalid_input",
+            f"existing_rules is not valid JSON: {exc}",
+            field="existing_rules",
             duration_ms=(time.monotonic() - start_time) * 1000,
         )
 
-    # ------------------------------------------------------------------
-    # Stage 7: Result generation
-    # ------------------------------------------------------------------
-    from fwrule_mcp.results.generator import ResultGenerator
-
-    end_time = time.monotonic()
+    if not isinstance(existing_raw, list):
+        return _build_error_response(
+            "invalid_input",
+            "existing_rules must be a JSON array of rule objects.",
+            field="existing_rules",
+            duration_ms=(time.monotonic() - start_time) * 1000,
+        )
 
     try:
-        generator = ResultGenerator()
-        response = generator.generate(
-            analysis_result=analysis_result,
-            vendor=vendor,
-            os_version=os_version,
-            start_time_monotonic=start_time,
-            end_time_monotonic=end_time,
-            parser_id=parser_id,
-        )
-    except Exception as exc:
-        logger.error("Result generation error (vendor=%s): %s", vendor, exc, exc_info=True)
+        existing_inputs = [RuleInput(**r) for r in existing_raw]
+    except (PydanticValidationError, TypeError) as exc:
         return _build_error_response(
-            "result_generation_error",
-            f"Failed to generate the analysis response: {exc}",
-            duration_ms=(end_time - start_time) * 1000,
+            "invalid_input",
+            f"existing_rules schema validation failed: {exc}",
+            field="existing_rules",
+            duration_ms=(time.monotonic() - start_time) * 1000,
         )
 
-    logger.info(
-        "Analysis complete: vendor=%s findings=%d overlap=%s duration_ms=%.1f",
-        vendor,
-        len(response.findings),
-        response.overlap_exists,
-        response.metadata.analysis_duration_ms,
-    )
+    # Parse and validate candidate rule
+    try:
+        candidate_raw = json.loads(candidate_rule_json)
+    except (json.JSONDecodeError, TypeError) as exc:
+        return _build_error_response(
+            "invalid_input",
+            f"candidate_rule is not valid JSON: {exc}",
+            field="candidate_rule",
+            duration_ms=(time.monotonic() - start_time) * 1000,
+        )
 
-    # Serialize to dict for FastMCP (Pydantic v2 model_dump)
-    result = response.model_dump(mode="json")
-    result["success"] = True
-    return result
+    try:
+        candidate_input = RuleInput(**candidate_raw)
+    except (PydanticValidationError, TypeError) as exc:
+        return _build_error_response(
+            "invalid_input",
+            f"candidate_rule schema validation failed: {exc}",
+            field="candidate_rule",
+            duration_ms=(time.monotonic() - start_time) * 1000,
+        )
+
+    # Convert to internal types
+    try:
+        normalized_rules = [rule_input_to_normalized(r) for r in existing_inputs]
+        normalized_candidate = rule_input_to_candidate(candidate_input, candidate_position)
+    except Exception as exc:
+        return _build_error_response(
+            "normalization_error",
+            f"Failed to convert normalized input to internal types: {exc}",
+            duration_ms=(time.monotonic() - start_time) * 1000,
+        )
+
+    return _run_analysis(normalized_rules, normalized_candidate, candidate_position, "normalized", start_time)
 
 
 # ---------------------------------------------------------------------------
@@ -321,130 +315,202 @@ def _run_pipeline(
     description=(
         "Analyze whether a candidate firewall rule overlaps with an existing ruleset. "
         "Detects exact duplicates, shadowed rules, action conflicts, and partial overlaps. "
-        "Supports Palo Alto PAN-OS (XML), Cisco ASA (text), Cisco FTD (JSON), "
-        "Cisco IOS/IOS-XE (text), Cisco IOS-XR (text), Check Point (JSON), "
-        "Juniper SRX (set format), Juniper Junos router filters (set format), "
-        "and Nokia SR OS MD-CLI (info/flat format)."
+        "Two input modes: (1) vendor-native configs via vendor + ruleset_payload + "
+        "candidate_rule_payload, or (2) pre-normalized JSON via existing_rules + candidate_rule. "
+        "Use parse_policy first to inspect parser output before analysis."
     ),
 )
 def analyze_firewall_rule_overlap(
-    vendor: str,
-    ruleset_payload: str,
-    candidate_rule_payload: str,
+    vendor: Optional[str] = None,
+    ruleset_payload: Optional[str] = None,
+    candidate_rule_payload: Optional[str] = None,
     os_version: Optional[str] = None,
     context_objects: Optional[str] = None,
     candidate_position: Optional[int] = None,
+    existing_rules: Optional[str] = None,
+    candidate_rule: Optional[str] = None,
 ) -> dict:
     """
     Analyze firewall rule overlap between a candidate rule and an existing policy.
 
-    Args:
-        vendor:
-            Firewall vendor identifier. Supported values:
-            - "panos"       — Palo Alto PAN-OS / Panorama (XML format)
-            - "asa"         — Cisco ASA (show running-config text)
-            - "ftd"         — Cisco FTD (JSON export from FMC)
-            - "ios"         — Cisco IOS / IOS-XE (show running-config text)
-            - "iosxr"       — Cisco IOS-XR (show running-config text)
-            - "checkpoint"  — Check Point (show-access-rulebase JSON)
-            - "juniper"     — Juniper SRX (set command format)
-            - "junos"       — Juniper Junos router firewall filters (set format)
-            - "sros"        — Nokia SR OS MD-CLI (info or flat /configure format)
+    Supports two input modes — use whichever matches your data:
 
-        ruleset_payload:
-            The complete existing firewall policy in vendor-native format.
-            - PAN-OS:    Full XML configuration export
-            - ASA:       Output of "show running-config"
-            - FTD:       JSON policy export from FMC
-            - Check Point: JSON from show-access-rulebase API
-            - Juniper:   Output of "show configuration | display set"
+    MODE 1 — Vendor-native configs (built-in parsers handle format conversion):
+        vendor:                 Vendor identifier ("panos", "asa", "ftd", "ios",
+                                "iosxr", "checkpoint", "juniper", "junos", "sros")
+        ruleset_payload:        Complete firewall config in vendor-native format
+        candidate_rule_payload: Single candidate rule in vendor-native format
+        os_version:             Optional OS version for parser selection
+        context_objects:        Optional JSON with supplemental object definitions
 
-        candidate_rule_payload:
-            The candidate rule to analyze, in the same vendor-native format.
-            Must be a single rule (or a minimal config fragment containing
-            exactly one rule).
+    MODE 2 — Pre-normalized JSON (caller has already extracted structured rules):
+        existing_rules:   JSON string — array of normalized rule objects:
+                          [{"id": "rule-1", "position": 1, "action": "permit",
+                            "source_addresses": ["10.0.0.0/24"],
+                            "destination_addresses": ["any"],
+                            "services": [{"protocol": "tcp", "ports": "443"}],
+                            "source_zones": ["trust"],
+                            "destination_zones": ["untrust"],
+                            "applications": ["any"]}]
+        candidate_rule:   JSON string — single normalized rule object (same schema)
 
-        os_version:
-            Optional OS version string (e.g., "10.2", "9.18", "7.4.1").
-            Used to select the correct parser variant when a vendor has
-            format differences across OS generations.  If omitted, the
-            default parser for the vendor is used.
+    SHARED PARAMETER:
+        candidate_position: Optional 1-based intended insertion position
 
-        context_objects:
-            Optional JSON string containing supplemental address/service object
-            definitions.  Provide when address objects are defined outside the
-            main ruleset payload (common with Panorama, FMC, and Check Point
-            management exports).
-            Expected format (JSON object):
-            {
-              "address_objects": {"WebServers": "10.1.2.0/24"},
-              "service_objects": {"HTTPS": "tcp/443"},
-              "address_groups": {"DMZ": ["WebServers", "AppServers"]},
-              "service_groups": {"WEB": ["HTTPS", "HTTP"]}
-            }
-
-        candidate_position:
-            Optional 1-based intended insertion position for the candidate rule.
-            When provided, shadow analysis only considers existing rules above
-            this position as potential shadows of the candidate.  If omitted,
-            the candidate is assumed to be appended at the end of the policy.
-
-    Returns:
-        A compact dict optimized for AI agent consumption:
+    Returns a compact dict:
         {
           "success": true,
           "overlap_exists": bool,
-          "findings": [
+          "findings": [{
+            "existing_rule_id": str,
+            "existing_rule_position": int,
+            "overlap_type": str,
+            "severity": str,
+            "candidate_action": str,
+            "existing_action": str,
+            "dimensions": {"source_zones": "equal", "destination_addresses": "superset", ...}
+          }],
+          "metadata": {"vendor": str, "existing_rule_count": int, ...}
+        }
+    """
+    # Route: normalized JSON takes precedence
+    if existing_rules is not None and candidate_rule is not None:
+        try:
+            return _run_normalized_pipeline(existing_rules, candidate_rule, candidate_position)
+        except Exception as exc:
+            logger.error("Unexpected error in normalized pipeline: %s", exc, exc_info=True)
+            return _build_error_response("internal_error", "Unexpected error in normalized pipeline.")
+
+    # Route: vendor-native pipeline
+    if vendor is not None and ruleset_payload is not None and candidate_rule_payload is not None:
+        try:
+            return _run_vendor_pipeline(
+                vendor=vendor,
+                ruleset_payload=ruleset_payload,
+                candidate_rule_payload=candidate_rule_payload,
+                os_version=os_version,
+                context_objects=context_objects,
+                candidate_position=candidate_position,
+            )
+        except Exception as exc:
+            logger.error("Unexpected error in vendor pipeline: %s", exc, exc_info=True)
+            return _build_error_response("internal_error", "Unexpected error in vendor pipeline.")
+
+    # Neither path has sufficient parameters
+    return _build_error_response(
+        "missing_parameters",
+        "Provide either (existing_rules + candidate_rule) for normalized input, "
+        "or (vendor + ruleset_payload + candidate_rule_payload) for vendor-native input.",
+    )
+
+
+@mcp.tool(
+    name="parse_policy",
+    description=(
+        "Parse a vendor-native firewall config and return normalized JSON rules. "
+        "Use this to inspect what the built-in parser extracts — verify rule counts, "
+        "object resolution, and address expansion before running overlap analysis. "
+        "The output uses the same normalized schema accepted by analyze_firewall_rule_overlap."
+    ),
+)
+def parse_policy(
+    vendor: str,
+    ruleset_payload: str,
+    os_version: Optional[str] = None,
+    context_objects: Optional[str] = None,
+) -> str:
+    """
+    Parse a vendor-native firewall configuration and return normalized rules.
+
+    Args:
+        vendor:          Vendor identifier (same values as analyze_firewall_rule_overlap)
+        ruleset_payload: Complete firewall config in vendor-native format
+        os_version:      Optional OS version string
+        context_objects: Optional JSON with supplemental object definitions
+
+    Returns a JSON string:
+        {
+          "success": true,
+          "rules": [
             {
-              "existing_rule_id": str,
-              "existing_rule_position": int,
-              "overlap_type": str,       # "shadowed", "conflict", "exact_duplicate", etc.
-              "severity": str,           # "critical", "high", "medium", "low", "info"
-              "candidate_action": str,   # "permit", "deny", etc.
-              "existing_action": str,
-              "dimensions": {            # dimension → relationship
-                "source_zones": "equal",
-                "destination_addresses": "superset",
-                ...
-              }
+              "id": "rule-name",
+              "position": 1,
+              "enabled": true,
+              "action": "permit",
+              "source_zones": ["trust"],
+              "destination_zones": ["untrust"],
+              "source_addresses": ["10.0.0.0/24"],
+              "destination_addresses": ["any"],
+              "services": [{"protocol": "tcp", "ports": "443"}],
+              "applications": ["any"]
             }
           ],
           "metadata": {
-            "vendor": str,
-            "existing_rule_count": int,
-            "enabled_rule_count": int,
-            "analysis_duration_ms": float
-          }
-        }
-
-        On error:
-        {
-          "success": false,
-          "error": {
-            "code": str,     # "unsupported_vendor", "parse_error", etc.
-            "message": str,
-            "field": str     # Optional — which input field caused the error
+            "vendor": "panos",
+            "parser": "PANOSParser",
+            "rule_count": 7,
+            "parse_warnings": []
           }
         }
     """
+    start_time = time.monotonic()
+
+    from fwrule_mcp.utils.validation import ValidationError, validate_vendor, validate_payload_size, validate_context_objects
+    from fwrule_mcp.utils.limits import MAX_RULESET_PAYLOAD_BYTES
+
     try:
-        return _run_pipeline(
-            vendor=vendor,
-            ruleset_payload=ruleset_payload,
-            candidate_rule_payload=candidate_rule_payload,
-            os_version=os_version,
-            context_objects=context_objects,
-            candidate_position=candidate_position,
-        )
+        vendor = validate_vendor(vendor)
+    except ValidationError as exc:
+        return json.dumps({"success": False, "error": {"code": "unsupported_vendor", "message": exc.message}})
+
+    try:
+        validate_payload_size(ruleset_payload, "ruleset_payload", MAX_RULESET_PAYLOAD_BYTES)
+    except ValidationError as exc:
+        return json.dumps({"success": False, "error": {"code": "payload_too_large", "message": exc.message}})
+
+    try:
+        context_dict = validate_context_objects(context_objects)
+    except ValidationError as exc:
+        return json.dumps({"success": False, "error": {"code": "invalid_context_objects", "message": exc.message}})
+
+    from fwrule_mcp.parsers.registry import registry, UnsupportedVendorError
+
+    try:
+        parser = registry.get_parser(vendor, os_version)
+    except UnsupportedVendorError as exc:
+        return json.dumps({"success": False, "error": {"code": "unsupported_vendor", "message": str(exc)}})
+
+    parser_id = type(parser).__name__
+
+    try:
+        parsed_policy = parser.parse_policy(raw_payload=ruleset_payload, context=context_dict)
     except Exception as exc:
-        logger.error(
-            "Unexpected error in analyze_firewall_rule_overlap (vendor=%s): %s",
-            vendor, exc, exc_info=True,
-        )
-        return _build_error_response(
-            "internal_error",
-            "An unexpected internal error occurred. Check server logs for details.",
-        )
+        return json.dumps({"success": False, "error": {"code": "parse_error", "message": str(exc)}})
+
+    from fwrule_mcp.normalization.normalizer import PolicyNormalizer
+    from fwrule_mcp.normalization.schema import normalized_rule_to_dict
+
+    try:
+        normalizer = PolicyNormalizer()
+        normalized_rules = normalizer.normalize_policy(parsed_policy)
+    except Exception as exc:
+        return json.dumps({"success": False, "error": {"code": "normalization_error", "message": str(exc)}})
+
+    rules_out = [normalized_rule_to_dict(r) for r in normalized_rules]
+
+    duration_ms = (time.monotonic() - start_time) * 1000
+
+    return json.dumps({
+        "success": True,
+        "rules": rules_out,
+        "metadata": {
+            "vendor": vendor,
+            "parser": parser_id,
+            "rule_count": len(rules_out),
+            "parse_warnings": parsed_policy.warnings[:20],
+            "duration_ms": round(duration_ms, 2),
+        },
+    })
 
 
 @mcp.tool(
@@ -452,16 +518,11 @@ def analyze_firewall_rule_overlap(
     description=(
         "List all supported firewall vendors and their configuration format requirements. "
         "Use this to understand what vendor identifiers and payload formats are accepted "
-        "by analyze_firewall_rule_overlap."
+        "by analyze_firewall_rule_overlap and parse_policy."
     ),
 )
 def list_supported_vendors() -> str:
-    """
-    List all supported firewall vendors.
-
-    Returns a JSON string describing supported vendors, their expected
-    configuration formats, and OS version ranges.
-    """
+    """List all supported firewall vendors."""
     return json.dumps({
         "vendors": [
             {
@@ -470,11 +531,6 @@ def list_supported_vendors() -> str:
                 "aliases": ["paloalto", "palo-alto", "pan-os", "panorama"],
                 "format": "XML configuration export (show config running, or Panorama export)",
                 "versions": "9.x - 11.x",
-                "notes": (
-                    "Supply the full XML config or a vsys/device-group fragment. "
-                    "Address/service objects from Panorama shared context can be provided "
-                    "via the context_objects parameter."
-                ),
             },
             {
                 "id": "asa",
@@ -482,11 +538,6 @@ def list_supported_vendors() -> str:
                 "aliases": ["cisco-asa", "cisco_asa"],
                 "format": "show running-config text output",
                 "versions": "9.x+",
-                "notes": (
-                    "Use 'show running-config' or a relevant section thereof. "
-                    "Access-list, object, and object-group definitions are all extracted "
-                    "from the same payload."
-                ),
             },
             {
                 "id": "ftd",
@@ -494,23 +545,13 @@ def list_supported_vendors() -> str:
                 "aliases": ["cisco-ftd", "firepower", "fmc"],
                 "format": "JSON export from Firepower Management Center (FMC)",
                 "versions": "6.x - 7.x",
-                "notes": (
-                    "Use the FMC REST API policy export. Network/port object definitions "
-                    "from shared libraries can be provided via context_objects."
-                ),
             },
             {
                 "id": "ios",
                 "name": "Cisco IOS / IOS-XE",
                 "aliases": ["ios-xe", "iosxe", "cisco-ios", "cisco_ios", "ios_xe"],
                 "format": "show running-config text output",
-                "versions": "12.x, 15.x, 16.x, 17.x (IOS); 3.x, 16.x, 17.x (IOS-XE)",
-                "notes": (
-                    "Handles standard and extended numbered ACLs (access-list <num>) "
-                    "and named ACLs (ip access-list extended|standard <name>). "
-                    "IOS-XE object-group network and object-group service are also supported. "
-                    "Wildcard masks are automatically converted to CIDR notation."
-                ),
+                "versions": "12.x - 17.x",
             },
             {
                 "id": "iosxr",
@@ -518,11 +559,6 @@ def list_supported_vendors() -> str:
                 "aliases": ["ios-xr", "ios_xr", "cisco-iosxr", "xr"],
                 "format": "show running-config text output",
                 "versions": "6.x, 7.x+",
-                "notes": (
-                    "Handles IPv4 and IPv6 named ACLs with sequence-numbered entries. "
-                    "Uses 'ipv4 access-list' / 'ipv6 access-list' syntax and CIDR notation. "
-                    "object-group network (ipv4/ipv6) and object-group port are supported."
-                ),
             },
             {
                 "id": "checkpoint",
@@ -530,11 +566,6 @@ def list_supported_vendors() -> str:
                 "aliases": ["check-point", "check_point", "cp"],
                 "format": "JSON package export (show-access-rulebase API response)",
                 "versions": "R80.x - R82.x",
-                "notes": (
-                    "Use the Management API 'show-access-rulebase' command output. "
-                    "Object definitions from the object database can be provided "
-                    "via context_objects when the rulebase export uses name references."
-                ),
             },
             {
                 "id": "juniper",
@@ -542,48 +573,26 @@ def list_supported_vendors() -> str:
                 "aliases": ["srx", "juniper-srx", "juniper_srx"],
                 "format": "set command format (show configuration | display set)",
                 "versions": "19.x+",
-                "notes": (
-                    "Use 'show configuration security policies | display set' output. "
-                    "Address book entries and application definitions are extracted "
-                    "from the same payload. For Junos router firewall filters (MX/PTX/QFX), "
-                    "use the 'junos' vendor instead."
-                ),
             },
             {
                 "id": "junos",
                 "name": "Juniper Junos router firewall filters (MX / PTX / QFX)",
-                "aliases": [
-                    "junos-filter", "junos_filter", "juniper-filter",
-                    "juniper_filter", "mx", "ptx", "qfx",
-                ],
+                "aliases": ["junos-filter", "junos_filter", "juniper-filter", "mx", "ptx", "qfx"],
                 "format": "set command format (show configuration | display set)",
                 "versions": "18.x+",
-                "notes": (
-                    "Handles 'firewall family inet filter <name> term <name>' constructs. "
-                    "Supports source/destination address, protocol, port matching, "
-                    "and policy-options prefix-list references. "
-                    "Actions: accept (→permit), discard (→deny), reject. "
-                    "This is DISTINCT from Juniper SRX security policies — use "
-                    "'juniper' for SRX zone-based policies."
-                ),
             },
             {
                 "id": "sros",
                 "name": "Nokia SR OS",
                 "aliases": ["sr-os", "sr_os", "nokia", "nokia-sros", "md-cli", "mdcli"],
-                "format": (
-                    "MD-CLI hierarchical info output or flat /configure command format"
-                ),
+                "format": "MD-CLI hierarchical info output or flat /configure command format",
                 "versions": "20.x+",
-                "notes": (
-                    "Supports ip-filter entry definitions with match + action blocks. "
-                    "Both hierarchical (braced info format) and flat "
-                    "(/configure filter ip-filter ...) command formats are auto-detected. "
-                    "match-list ip-prefix-list definitions are extracted as address groups. "
-                    "Actions: accept (→permit), drop (→deny), reject."
-                ),
             },
-        ]
+        ],
+        "note": (
+            "You can also bypass vendor parsers entirely by passing pre-normalized JSON "
+            "to analyze_firewall_rule_overlap via the existing_rules + candidate_rule parameters."
+        ),
     })
 
 
@@ -596,17 +605,12 @@ def main() -> None:
     """Entry point for the ``fwrule-mcp`` CLI command."""
     import os
 
-    # Suppress logging to stderr in stdio transport mode — some MCP hosts
-    # (e.g., iagctl) may be confused by unexpected stderr output.
     log_level = os.environ.get("FWRULE_LOG_LEVEL", "WARNING").upper()
     logging.basicConfig(
         level=getattr(logging, log_level, logging.WARNING),
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
 
-    # Disable FastMCP's PyPI version check and startup banner — the version
-    # check can hang in restricted network environments and cause MCP client
-    # connection timeouts.
     os.environ.setdefault("FASTMCP_CHECK_FOR_UPDATES", "0")
     os.environ.setdefault("FASTMCP_SHOW_SERVER_BANNER", "0")
 
