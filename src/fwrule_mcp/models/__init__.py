@@ -14,7 +14,7 @@ Public surface:
       AnalysisRequest, ContextObjects, SUPPORTED_VENDORS,
   )
   from fwrule_mcp.models.response import (
-      AnalysisMetadata, AnalysisResponse, DimensionDetail,
+      AnalysisMetadata, AnalysisResponse,
       Finding, OverlapType, Severity,
   )
 """
@@ -46,7 +46,6 @@ from fwrule_mcp.models.request import (
 from fwrule_mcp.models.response import (
     AnalysisMetadata,
     AnalysisResponse,
-    DimensionDetail,
     Finding,
     OverlapType,
     Severity,
@@ -77,7 +76,6 @@ __all__ = [
     # response
     "AnalysisMetadata",
     "AnalysisResponse",
-    "DimensionDetail",
     "Finding",
     "OverlapType",
     "Severity",

@@ -390,7 +390,7 @@ def analyze_firewall_rule_overlap(
             the candidate is assumed to be appended at the end of the policy.
 
     Returns:
-        A dict with the following structure:
+        A compact dict optimized for AI agent consumption:
         {
           "success": true,
           "overlap_exists": bool,
@@ -398,20 +398,22 @@ def analyze_firewall_rule_overlap(
             {
               "existing_rule_id": str,
               "existing_rule_position": int,
-              "overlap_type": str,   # "shadowed", "conflict", "exact_duplicate", etc.
-              "severity": str,       # "critical", "high", "medium", "low", "info"
-              "explanation": str,    # Human-readable explanation
-              "remediation": str,    # Optional remediation suggestion
-              "dimensions": [...]    # Per-dimension breakdown
+              "overlap_type": str,       # "shadowed", "conflict", "exact_duplicate", etc.
+              "severity": str,           # "critical", "high", "medium", "low", "info"
+              "candidate_action": str,   # "permit", "deny", etc.
+              "existing_action": str,
+              "dimensions": {            # dimension → relationship
+                "source_zones": "equal",
+                "destination_addresses": "superset",
+                ...
+              }
             }
           ],
-          "analysis_summary": str,
           "metadata": {
             "vendor": str,
             "existing_rule_count": int,
             "enabled_rule_count": int,
-            "analysis_duration_ms": float,
-            "timestamp": str
+            "analysis_duration_ms": float
           }
         }
 

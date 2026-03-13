@@ -354,7 +354,6 @@ def test_analysis_response_structure():
     assert result["success"] is True
     assert "overlap_exists" in result
     assert "findings" in result
-    assert "analysis_summary" in result
     assert "metadata" in result
 
 
@@ -384,7 +383,8 @@ def test_finding_structure():
         assert "existing_rule_id" in finding
         assert "overlap_type" in finding
         assert "severity" in finding
-        assert "explanation" in finding
+        assert "dimensions" in finding
+        assert "candidate_action" in finding
 
 
 def test_candidate_position_affects_shadow_analysis():

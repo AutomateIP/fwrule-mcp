@@ -4,14 +4,11 @@ Unit tests for models/response.py — AnalysisResponse, Finding, OverlapType, Se
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 import pytest
 
 from fwrule_mcp.models.response import (
     AnalysisMetadata,
     AnalysisResponse,
-    DimensionDetail,
     Finding,
     OverlapType,
     Severity,
@@ -40,7 +37,6 @@ def _make_finding(
         existing_rule_position=position,
         overlap_type=overlap_type,
         severity=severity,
-        explanation="Test explanation.",
     )
 
 
@@ -56,27 +52,16 @@ class TestFinding:
         assert not _make_finding(severity=Severity.MEDIUM).is_critical_or_high
         assert not _make_finding(severity=Severity.LOW).is_critical_or_high
 
-    def test_remediation_optional(self):
-        f = _make_finding()
-        assert f.remediation is None
-
-    def test_dimension_detail_included(self):
+    def test_dimensions_as_dict(self):
         f = Finding(
             existing_rule_id="r1",
             existing_rule_position=1,
             overlap_type=OverlapType.SUBSET,
             severity=Severity.INFO,
-            explanation="Subset.",
-            dimensions=[
-                DimensionDetail(
-                    dimension="source_address",
-                    relationship="subset",
-                    description="Candidate is subset of existing.",
-                )
-            ],
+            dimensions={"source_addresses": "subset", "services": "equal"},
         )
-        assert len(f.dimensions) == 1
-        assert f.dimensions[0].dimension == "source_address"
+        assert f.dimensions["source_addresses"] == "subset"
+        assert f.dimensions["services"] == "equal"
 
     def test_extra_fields_forbidden(self):
         with pytest.raises(Exception):
@@ -85,7 +70,6 @@ class TestFinding:
                 existing_rule_position=1,
                 overlap_type=OverlapType.NO_OVERLAP,
                 severity=Severity.INFO,
-                explanation=".",
                 unknown_extra="x",
             )
 
@@ -95,7 +79,6 @@ class TestAnalysisResponse:
         resp = AnalysisResponse(
             overlap_exists=False,
             findings=[],
-            analysis_summary="No overlaps detected.",
             metadata=_make_metadata(),
         )
         assert not resp.overlap_exists
@@ -106,7 +89,6 @@ class TestAnalysisResponse:
         resp = AnalysisResponse(
             overlap_exists=True,
             findings=[f],
-            analysis_summary="Candidate is shadowed.",
             metadata=_make_metadata(),
         )
         assert resp.overlap_exists
@@ -124,7 +106,6 @@ class TestAnalysisResponse:
         resp = AnalysisResponse(
             overlap_exists=True,
             findings=findings,
-            analysis_summary="Multiple issues.",
             metadata=_make_metadata(),
         )
         assert len(resp.critical_findings()) == 2
@@ -139,7 +120,6 @@ class TestAnalysisResponse:
         resp = AnalysisResponse(
             overlap_exists=True,
             findings=findings,
-            analysis_summary=".",
             metadata=_make_metadata(),
         )
         assert len(resp.findings_by_type(OverlapType.CONFLICT)) == 2
@@ -150,14 +130,9 @@ class TestAnalysisResponse:
         resp = AnalysisResponse(
             overlap_exists=True,
             findings=[f],
-            analysis_summary="Duplicate.",
             metadata=_make_metadata(),
         )
         assert resp.has_exact_duplicates()
-
-    def test_metadata_timestamp_utc(self):
-        meta = _make_metadata()
-        assert meta.timestamp.tzinfo == timezone.utc
 
     def test_metadata_analysis_duration_nonnegative(self):
         with pytest.raises(Exception):
