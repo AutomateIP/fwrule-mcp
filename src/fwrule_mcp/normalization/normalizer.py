@@ -94,17 +94,25 @@ class PolicyNormalizer:
     across many normalize_policy() calls.
     """
 
-    def normalize_policy(self, parsed_policy: ParsedPolicy) -> list[NormalizedRule]:
+    def normalize_policy(
+        self,
+        parsed_policy: ParsedPolicy,
+        include_implicit_rules: bool = True,
+    ) -> list[NormalizedRule]:
         """
         Normalize all rules in a parsed policy.
 
         Steps:
         1. Build an ObjectResolver from parsed_policy.object_table.
         2. For each VendorRule (in order), call normalize_rule().
-        3. Return the ordered list of NormalizedRule objects.
+        3. Optionally append vendor-specific implicit rules (e.g., deny-all).
+        4. Return the ordered list of NormalizedRule objects.
 
         Args:
-            parsed_policy: Output of a VendorParser.parse_policy() call.
+            parsed_policy:          Output of a VendorParser.parse_policy() call.
+            include_implicit_rules: If True (default), append vendor-specific
+                                    implicit rules such as the implicit deny-all
+                                    at the end of Cisco ACLs.
 
         Returns:
             List of NormalizedRule, one per VendorRule, in policy order.
@@ -126,6 +134,12 @@ class PolicyNormalizer:
                     exc,
                     exc_info=True,
                 )
+
+        if include_implicit_rules:
+            from fwrule_mcp.normalization.implicit import inject_implicit_rules
+            normalized_rules = inject_implicit_rules(
+                normalized_rules, parsed_policy.vendor,
+            )
 
         return normalized_rules
 

@@ -492,7 +492,9 @@ def parse_policy(
 
     try:
         normalizer = PolicyNormalizer()
-        normalized_rules = normalizer.normalize_policy(parsed_policy)
+        normalized_rules = normalizer.normalize_policy(
+            parsed_policy, include_implicit_rules=False,
+        )
     except Exception as exc:
         return json.dumps({"success": False, "error": {"code": "normalization_error", "message": str(exc)}})
 

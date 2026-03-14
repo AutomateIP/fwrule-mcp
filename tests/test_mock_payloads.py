@@ -50,6 +50,21 @@ def _overlap_types(result: dict) -> list[str]:
     return [f["overlap_type"] for f in result.get("findings", [])]
 
 
+def _assert_only_implicit_deny(result: dict) -> None:
+    """Assert that the only finding is overlap with the vendor implicit deny-all."""
+    assert result["success"], f"Pipeline failed: {result.get('error')}"
+    assert result["overlap_exists"], "Expected overlap with implicit deny-all"
+    findings = result["findings"]
+    # All findings should be against implicit rules only
+    for f in findings:
+        assert f["is_implicit_rule"], (
+            f"Expected only implicit rule findings, got explicit: {f['existing_rule_id']}"
+        )
+        assert "__implicit_" in f["existing_rule_id"], (
+            f"Expected implicit rule ID, got: {f['existing_rule_id']}"
+        )
+
+
 # ---------------------------------------------------------------------------
 # PAN-OS Tests
 # ---------------------------------------------------------------------------
@@ -108,15 +123,9 @@ class TestPANOSMockPayloads:
         )
 
     def test_no_overlap(self):
-        """Completely disjoint candidate → no findings."""
+        """Completely disjoint candidate → only implicit deny overlap."""
         result = _run(self.VENDOR, self.POLICY, "panos_no_overlap.xml")
-        assert result["success"], f"Pipeline failed: {result.get('error')}"
-        assert not result["overlap_exists"], (
-            f"Expected overlap_exists=False for disjoint rule, findings: {_overlap_types(result)}"
-        )
-        assert result["findings"] == [], (
-            f"Expected empty findings for disjoint rule, got: {result['findings']}"
-        )
+        _assert_only_implicit_deny(result)
 
 
 # ---------------------------------------------------------------------------
@@ -176,12 +185,9 @@ class TestASAMockPayloads:
         )
 
     def test_no_overlap(self):
-        """Completely different subnet/port space → no findings."""
+        """Completely different subnet/port space → only implicit deny overlap."""
         result = _run(self.VENDOR, self.POLICY, "asa_no_overlap.conf")
-        assert result["success"], f"Pipeline failed: {result.get('error')}"
-        assert not result["overlap_exists"], (
-            f"Expected overlap_exists=False for disjoint rule, findings: {_overlap_types(result)}"
-        )
+        _assert_only_implicit_deny(result)
 
 
 # ---------------------------------------------------------------------------
@@ -241,12 +247,9 @@ class TestFTDMockPayloads:
         )
 
     def test_no_overlap(self):
-        """Completely different zone pair and subnet → no findings."""
+        """Completely different zone pair and subnet → only implicit deny overlap."""
         result = _run(self.VENDOR, self.POLICY, "ftd_no_overlap.json")
-        assert result["success"], f"Pipeline failed: {result.get('error')}"
-        assert not result["overlap_exists"], (
-            f"Expected overlap_exists=False for disjoint rule, findings: {_overlap_types(result)}"
-        )
+        _assert_only_implicit_deny(result)
 
 
 # ---------------------------------------------------------------------------
@@ -306,12 +309,9 @@ class TestCheckPointMockPayloads:
         )
 
     def test_no_overlap(self):
-        """Different zones (vpn/isolated-backend) and subnets → no findings."""
+        """Different zones (vpn/isolated-backend) and subnets → only implicit deny overlap."""
         result = _run(self.VENDOR, self.POLICY, "checkpoint_no_overlap.json")
-        assert result["success"], f"Pipeline failed: {result.get('error')}"
-        assert not result["overlap_exists"], (
-            f"Expected overlap_exists=False for disjoint rule, findings: {_overlap_types(result)}"
-        )
+        _assert_only_implicit_deny(result)
 
 
 # ---------------------------------------------------------------------------
@@ -371,12 +371,9 @@ class TestJuniperMockPayloads:
         )
 
     def test_no_overlap(self):
-        """Completely different zone pair (vpn/isolated) and subnets → no findings."""
+        """Completely different zone pair (vpn/isolated) and subnets → only implicit deny overlap."""
         result = _run(self.VENDOR, self.POLICY, "juniper_no_overlap.txt")
-        assert result["success"], f"Pipeline failed: {result.get('error')}"
-        assert not result["overlap_exists"], (
-            f"Expected overlap_exists=False for disjoint rule, findings: {_overlap_types(result)}"
-        )
+        _assert_only_implicit_deny(result)
 
 
 # ---------------------------------------------------------------------------
@@ -436,15 +433,9 @@ class TestIOSMockPayloads:
         )
 
     def test_no_overlap(self):
-        """Completely different subnet and port → no findings."""
+        """Completely different subnet and port → only implicit deny overlap."""
         result = _run(self.VENDOR, self.POLICY, "ios_no_overlap.conf")
-        assert result["success"], f"Pipeline failed: {result.get('error')}"
-        assert not result["overlap_exists"], (
-            f"Expected overlap_exists=False for disjoint rule, findings: {_overlap_types(result)}"
-        )
-        assert result["findings"] == [], (
-            f"Expected empty findings for disjoint rule, got: {result['findings']}"
-        )
+        _assert_only_implicit_deny(result)
 
 
 # ---------------------------------------------------------------------------
@@ -504,15 +495,9 @@ class TestIOSXRMockPayloads:
         )
 
     def test_no_overlap(self):
-        """Completely different subnet and port → no findings."""
+        """Completely different subnet and port → only implicit deny overlap."""
         result = _run(self.VENDOR, self.POLICY, "iosxr_no_overlap.conf")
-        assert result["success"], f"Pipeline failed: {result.get('error')}"
-        assert not result["overlap_exists"], (
-            f"Expected overlap_exists=False for disjoint rule, findings: {_overlap_types(result)}"
-        )
-        assert result["findings"] == [], (
-            f"Expected empty findings for disjoint rule, got: {result['findings']}"
-        )
+        _assert_only_implicit_deny(result)
 
 
 # ---------------------------------------------------------------------------
@@ -572,15 +557,9 @@ class TestJunosMockPayloads:
         )
 
     def test_no_overlap(self):
-        """Completely disjoint subnets and port → no findings."""
+        """Completely disjoint subnets and port → only implicit deny overlap."""
         result = _run(self.VENDOR, self.POLICY, "junos_no_overlap.txt")
-        assert result["success"], f"Pipeline failed: {result.get('error')}"
-        assert not result["overlap_exists"], (
-            f"Expected overlap_exists=False for disjoint rule, findings: {_overlap_types(result)}"
-        )
-        assert result["findings"] == [], (
-            f"Expected empty findings for disjoint rule, got: {result['findings']}"
-        )
+        _assert_only_implicit_deny(result)
 
 
 # ---------------------------------------------------------------------------
@@ -640,12 +619,6 @@ class TestSROSMockPayloads:
         )
 
     def test_no_overlap(self):
-        """Completely disjoint subnets and port → no findings."""
+        """Completely disjoint subnets and port → only implicit deny overlap."""
         result = _run(self.VENDOR, self.POLICY, "sros_no_overlap.txt")
-        assert result["success"], f"Pipeline failed: {result.get('error')}"
-        assert not result["overlap_exists"], (
-            f"Expected overlap_exists=False for disjoint rule, findings: {_overlap_types(result)}"
-        )
-        assert result["findings"] == [], (
-            f"Expected empty findings for disjoint rule, got: {result['findings']}"
-        )
+        _assert_only_implicit_deny(result)

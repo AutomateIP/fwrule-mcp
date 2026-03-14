@@ -201,6 +201,15 @@ class NormalizedRule(BaseModel):
             "analysis engine treats them as non-participating."
         ),
     )
+    is_implicit: bool = Field(
+        default=False,
+        description=(
+            "True if this rule was synthesized by the normalization layer to "
+            "represent a vendor-specific implicit default (e.g., implicit "
+            "deny-all at end of a Cisco ACL). Implicit rules are not present "
+            "in the original configuration text."
+        ),
+    )
     match: MatchSpec = Field(
         description="The complete, resolved match criteria for this rule.",
     )

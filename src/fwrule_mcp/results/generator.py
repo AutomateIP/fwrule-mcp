@@ -140,6 +140,7 @@ class ResultGenerator:
             dimensions=dimensions,
             candidate_action=candidate_action.value,
             existing_action=rule.action.value,
+            is_implicit_rule=getattr(rule, "is_implicit", False),
         )
 
     # ------------------------------------------------------------------

@@ -454,13 +454,18 @@ def test_normalize_rule_basic():
     policy = ParsedPolicy(rules=[vr], object_table=ObjectTable(), vendor="panos")
     normalizer = PolicyNormalizer()
     rules = normalizer.normalize_policy(policy)
-    assert len(rules) == 1
+    assert len(rules) == 2  # 1 explicit + 1 implicit interzone deny
     rule = rules[0]
     assert rule.position == 1
     assert rule.action == Action.PERMIT
+    assert not rule.is_implicit
     assert not rule.match.source_zones.is_any
     assert not rule.match.source_addresses.is_any
     assert not rule.match.services.is_any
+    # Verify implicit rule
+    implicit = rules[1]
+    assert implicit.is_implicit
+    assert implicit.action == Action.DENY
 
 
 def test_normalize_rule_any_addresses():

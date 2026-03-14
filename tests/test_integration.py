@@ -181,14 +181,17 @@ def test_panos_shadowed_rule():
 
 
 def test_panos_no_overlap_disjoint_zones():
-    """PAN-OS: disjoint zone policies should not overlap."""
+    """PAN-OS: disjoint zone policies → only implicit interzone deny overlap."""
     result = analyze_firewall_rule_overlap(
         vendor="panos",
         ruleset_payload=PANOS_POLICY,
         candidate_rule_payload=PANOS_CANDIDATE_DISJOINT,
     )
     assert result["success"] is True
-    assert result["overlap_exists"] is False
+    assert result["overlap_exists"] is True
+    # Only finding should be against the implicit interzone deny
+    for f in result["findings"]:
+        assert f["is_implicit_rule"] is True
 
 
 def test_panos_conflict_different_action():
@@ -225,7 +228,7 @@ def test_asa_conflict_detection():
 
 
 def test_asa_no_overlap():
-    """ASA: candidate with disjoint source subnet and different service has no duplicate/conflict."""
+    """ASA: candidate with disjoint source subnet → only implicit deny overlap."""
     # Use a policy that only permits HTTPS from a specific subnet
     specific_policy = "access-list INSIDE_OUT extended permit tcp 10.0.0.0 0.0.0.255 host 10.1.2.10 eq https\n"
     # Candidate from a completely different source subnet to a different destination
@@ -236,19 +239,23 @@ def test_asa_no_overlap():
         candidate_rule_payload=disjoint_candidate,
     )
     assert result["success"] is True
-    # Source addresses are disjoint → no overlap
-    assert result["overlap_exists"] is False
+    # Source addresses are disjoint from explicit rules, but overlaps with implicit deny
+    assert result["overlap_exists"] is True
+    for f in result["findings"]:
+        assert f["is_implicit_rule"] is True
 
 
 def test_juniper_no_overlap():
-    """Juniper: disjoint zone policies should not overlap."""
+    """Juniper: disjoint zone policies → only implicit default deny overlap."""
     result = analyze_firewall_rule_overlap(
         vendor="juniper",
         ruleset_payload=JUNIPER_POLICY,
         candidate_rule_payload=JUNIPER_CANDIDATE_DISJOINT,
     )
     assert result["success"] is True
-    assert result["overlap_exists"] is False
+    assert result["overlap_exists"] is True
+    for f in result["findings"]:
+        assert f["is_implicit_rule"] is True
 
 
 def test_juniper_duplicate_detection():

@@ -94,6 +94,14 @@ class Finding(BaseModel):
         default=None,
         description="Action of the existing rule.",
     )
+    is_implicit_rule: bool = Field(
+        default=False,
+        description=(
+            "True when the existing rule is a vendor-synthesized implicit default "
+            "(e.g., implicit deny-all at end of Cisco ACL). The rule does not "
+            "appear in the configuration export."
+        ),
+    )
 
     model_config = {"extra": "forbid"}
 
