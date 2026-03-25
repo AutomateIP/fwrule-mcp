@@ -395,8 +395,12 @@ class IOSParser(VendorParser):
                 continue
 
             # Named ACL header: "ip access-list {extended|standard} <name>"
+            # Also matches "show access-lists" output: "Extended IP access list <name>"
             m = re.match(
                 r"^ip\s+access-list\s+(extended|standard)\s+(\S+)\s*$",
+                stripped, re.IGNORECASE
+            ) or re.match(
+                r"^(Extended|Standard)\s+IP\s+access\s+list\s+(\S+)\s*$",
                 stripped, re.IGNORECASE
             )
             if m:
