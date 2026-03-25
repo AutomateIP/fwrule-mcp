@@ -20,26 +20,34 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Optional, Union
+from typing import Annotated, Optional
 
 from fastmcp import FastMCP
+from pydantic import BeforeValidator, Field
 
 logger = logging.getLogger(__name__)
 
 
-def _coerce_to_json_str(value: Union[str, dict, list, None]) -> Optional[str]:
-    """Coerce a value that should be a JSON string.
+# ---------------------------------------------------------------------------
+# Type coercion for MCP clients that send dicts/lists instead of JSON strings
+# ---------------------------------------------------------------------------
 
-    Some MCP clients (e.g. iagctl) send structured objects (dicts/lists)
-    instead of JSON-encoded strings.  This normalizes them so downstream
-    code that expects ``str`` works correctly.  Empty dicts/lists become
-    None.
-    """
-    if value is None:
-        return None
-    if isinstance(value, (dict, list)):
-        return json.dumps(value) if value else None
-    return value
+def _coerce_json(v):
+    """Pre-validator: dict/list → JSON string, empty containers → None."""
+    if v is None:
+        return v
+    if isinstance(v, (dict, list)):
+        return json.dumps(v) if v else None
+    return v
+
+
+def _coerce_json_or_empty(v):
+    """Pre-validator: like _coerce_json but returns '' instead of None."""
+    if v is None:
+        return ""
+    if isinstance(v, (dict, list)):
+        return json.dumps(v) if v else ""
+    return v
 
 
 # ---------------------------------------------------------------------------
@@ -337,65 +345,37 @@ def _run_normalized_pipeline(
     ),
 )
 def analyze_firewall_rule_overlap(
-    vendor: Optional[str] = None,
-    ruleset_payload: Union[str, list, dict, None] = None,
-    candidate_rule_payload: Union[str, dict, None] = None,
-    os_version: Optional[str] = None,
-    context_objects: Union[str, dict, None] = None,
-    candidate_position: Optional[int] = None,
-    existing_rules: Union[str, list, None] = None,
-    candidate_rule: Union[str, dict, None] = None,
+    vendor: Annotated[Optional[str], BeforeValidator(_coerce_json), Field(
+        description='Vendor identifier. One of: "panos", "asa", "ftd", "ios", "iosxr", "checkpoint", "juniper", "junos", "sros". Required for Mode 1 (vendor-native).',
+    )] = None,
+    ruleset_payload: Annotated[Optional[str], BeforeValidator(_coerce_json), Field(
+        description="Complete firewall config in vendor-native text format (e.g. full 'show access-lists' output for IOS). Required for Mode 1.",
+    )] = None,
+    candidate_rule_payload: Annotated[Optional[str], BeforeValidator(_coerce_json), Field(
+        description="Single candidate rule in vendor-native text format (e.g. one ACL line for IOS). Required for Mode 1.",
+    )] = None,
+    os_version: Annotated[Optional[str], Field(
+        description="Optional OS version string for parser selection.",
+    )] = None,
+    context_objects: Annotated[Optional[str], BeforeValidator(_coerce_json), Field(
+        description="Optional JSON string with supplemental object definitions (address groups, service objects).",
+    )] = None,
+    candidate_position: Annotated[Optional[int], Field(
+        description="Optional 1-based intended insertion position of the candidate rule.",
+    )] = None,
+    existing_rules: Annotated[Optional[str], BeforeValidator(_coerce_json), Field(
+        description='JSON string — array of normalized rule objects. Each object: {"id": str, "position": int, "action": "permit"|"deny", "source_addresses": ["CIDR"|"any"], "destination_addresses": ["CIDR"|"any"], "services": [{"protocol": "tcp"|"udp"|"icmp", "ports": "number"}], "source_zones": ["any"], "destination_zones": ["any"], "applications": ["any"]}. Required for Mode 2 (normalized JSON). Use parse_policy output.',
+    )] = None,
+    candidate_rule: Annotated[Optional[str], BeforeValidator(_coerce_json), Field(
+        description='JSON string — single normalized rule object (same schema as existing_rules elements). Required for Mode 2.',
+    )] = None,
 ) -> dict:
+    """Analyze firewall rule overlap between a candidate rule and an existing policy.
+
+    Two input modes (provide parameters for one mode only):
+      Mode 1 (vendor-native): vendor + ruleset_payload + candidate_rule_payload
+      Mode 2 (normalized JSON): existing_rules + candidate_rule (recommended — use parse_policy first)
     """
-    Analyze firewall rule overlap between a candidate rule and an existing policy.
-
-    Supports two input modes — use whichever matches your data:
-
-    MODE 1 — Vendor-native configs (built-in parsers handle format conversion):
-        vendor:                 Vendor identifier ("panos", "asa", "ftd", "ios",
-                                "iosxr", "checkpoint", "juniper", "junos", "sros")
-        ruleset_payload:        Complete firewall config in vendor-native format
-        candidate_rule_payload: Single candidate rule in vendor-native format
-        os_version:             Optional OS version for parser selection
-        context_objects:        Optional JSON with supplemental object definitions
-
-    MODE 2 — Pre-normalized JSON (caller has already extracted structured rules):
-        existing_rules:   JSON string — array of normalized rule objects:
-                          [{"id": "rule-1", "position": 1, "action": "permit",
-                            "source_addresses": ["10.0.0.0/24"],
-                            "destination_addresses": ["any"],
-                            "services": [{"protocol": "tcp", "ports": "443"}],
-                            "source_zones": ["trust"],
-                            "destination_zones": ["untrust"],
-                            "applications": ["any"]}]
-        candidate_rule:   JSON string — single normalized rule object (same schema)
-
-    SHARED PARAMETER:
-        candidate_position: Optional 1-based intended insertion position
-
-    Returns a compact dict:
-        {
-          "success": true,
-          "overlap_exists": bool,
-          "findings": [{
-            "existing_rule_id": str,
-            "existing_rule_position": int,
-            "overlap_type": str,
-            "severity": str,
-            "candidate_action": str,
-            "existing_action": str,
-            "dimensions": {"source_zones": "equal", "destination_addresses": "superset", ...}
-          }],
-          "metadata": {"vendor": str, "existing_rule_count": int, ...}
-        }
-    """
-    # Coerce structured objects to JSON strings (iagctl sends dicts/lists)
-    ruleset_payload = _coerce_to_json_str(ruleset_payload)
-    candidate_rule_payload = _coerce_to_json_str(candidate_rule_payload)
-    context_objects = _coerce_to_json_str(context_objects)
-    existing_rules = _coerce_to_json_str(existing_rules)
-    candidate_rule = _coerce_to_json_str(candidate_rule)
-
     # Route: normalized JSON takes precedence
     if existing_rules is not None and candidate_rule is not None:
         try:
@@ -437,48 +417,25 @@ def analyze_firewall_rule_overlap(
     ),
 )
 def parse_policy(
-    vendor: str,
-    ruleset_payload: Union[str, list, dict] = "",
-    os_version: Optional[str] = None,
-    context_objects: Union[str, dict, None] = None,
+    vendor: Annotated[str, Field(
+        description='Vendor identifier. One of: "panos", "asa", "ftd", "ios", "iosxr", "checkpoint", "juniper", "junos", "sros".',
+    )],
+    ruleset_payload: Annotated[str, BeforeValidator(_coerce_json_or_empty), Field(
+        description="Complete firewall config in vendor-native text format. For IOS: paste the full 'show access-lists <name>' output. For PAN-OS: paste the full XML config tree.",
+    )] = "",
+    os_version: Annotated[Optional[str], Field(
+        description="Optional OS version string for parser variant selection.",
+    )] = None,
+    context_objects: Annotated[Optional[str], BeforeValidator(_coerce_json), Field(
+        description="Optional JSON string with supplemental object definitions (address groups, service objects).",
+    )] = None,
 ) -> str:
-    """
-    Parse a vendor-native firewall configuration and return normalized rules.
+    """Parse a vendor-native firewall configuration and return normalized JSON rules.
 
-    Args:
-        vendor:          Vendor identifier (same values as analyze_firewall_rule_overlap)
-        ruleset_payload: Complete firewall config in vendor-native format
-        os_version:      Optional OS version string
-        context_objects: Optional JSON with supplemental object definitions
-
-    Returns a JSON string:
-        {
-          "success": true,
-          "rules": [
-            {
-              "id": "rule-name",
-              "position": 1,
-              "enabled": true,
-              "action": "permit",
-              "source_zones": ["trust"],
-              "destination_zones": ["untrust"],
-              "source_addresses": ["10.0.0.0/24"],
-              "destination_addresses": ["any"],
-              "services": [{"protocol": "tcp", "ports": "443"}],
-              "applications": ["any"]
-            }
-          ],
-          "metadata": {
-            "vendor": "panos",
-            "parser": "PANOSParser",
-            "rule_count": 7,
-            "parse_warnings": []
-          }
-        }
+    Returns {"success": true, "rules": [...], "metadata": {...}}.
+    The rules array uses the same normalized schema accepted by analyze_firewall_rule_overlap existing_rules parameter.
     """
     start_time = time.monotonic()
-    ruleset_payload = _coerce_to_json_str(ruleset_payload) or ""
-    context_objects = _coerce_to_json_str(context_objects)
 
     from fwrule_mcp.utils.validation import ValidationError, validate_vendor, validate_payload_size, validate_context_objects
     from fwrule_mcp.utils.limits import MAX_RULESET_PAYLOAD_BYTES
