@@ -27,16 +27,17 @@ from fastmcp import FastMCP
 logger = logging.getLogger(__name__)
 
 
-def _normalize_context_objects(value: Union[str, dict, None]) -> Optional[str]:
-    """Coerce context_objects to a JSON string.
+def _coerce_to_json_str(value: Union[str, dict, list, None]) -> Optional[str]:
+    """Coerce a value that should be a JSON string.
 
-    Some MCP clients (e.g. iagctl) send an empty dict ``{}`` instead of
-    omitting the parameter.  This normalizes dict → JSON string and
-    treats empty dicts as None so downstream validation works correctly.
+    Some MCP clients (e.g. iagctl) send structured objects (dicts/lists)
+    instead of JSON-encoded strings.  This normalizes them so downstream
+    code that expects ``str`` works correctly.  Empty dicts/lists become
+    None.
     """
     if value is None:
         return None
-    if isinstance(value, dict):
+    if isinstance(value, (dict, list)):
         return json.dumps(value) if value else None
     return value
 
@@ -141,15 +142,14 @@ def _run_analysis(
 
 def _run_vendor_pipeline(
     vendor: str,
-    ruleset_payload: str,
-    candidate_rule_payload: str,
+    ruleset_payload: Optional[str],
+    candidate_rule_payload: Optional[str],
     os_version: Optional[str],
-    context_objects: Union[str, dict, None],
+    context_objects: Optional[str],
     candidate_position: Optional[int],
 ) -> dict:
     """Path A: vendor parser pipeline."""
     start_time = time.monotonic()
-    context_objects = _normalize_context_objects(context_objects)
 
     from fwrule_mcp.utils.validation import (
         ValidationError,
@@ -338,13 +338,13 @@ def _run_normalized_pipeline(
 )
 def analyze_firewall_rule_overlap(
     vendor: Optional[str] = None,
-    ruleset_payload: Optional[str] = None,
-    candidate_rule_payload: Optional[str] = None,
+    ruleset_payload: Union[str, list, dict, None] = None,
+    candidate_rule_payload: Union[str, dict, None] = None,
     os_version: Optional[str] = None,
     context_objects: Union[str, dict, None] = None,
     candidate_position: Optional[int] = None,
-    existing_rules: Optional[str] = None,
-    candidate_rule: Optional[str] = None,
+    existing_rules: Union[str, list, None] = None,
+    candidate_rule: Union[str, dict, None] = None,
 ) -> dict:
     """
     Analyze firewall rule overlap between a candidate rule and an existing policy.
@@ -389,6 +389,13 @@ def analyze_firewall_rule_overlap(
           "metadata": {"vendor": str, "existing_rule_count": int, ...}
         }
     """
+    # Coerce structured objects to JSON strings (iagctl sends dicts/lists)
+    ruleset_payload = _coerce_to_json_str(ruleset_payload)
+    candidate_rule_payload = _coerce_to_json_str(candidate_rule_payload)
+    context_objects = _coerce_to_json_str(context_objects)
+    existing_rules = _coerce_to_json_str(existing_rules)
+    candidate_rule = _coerce_to_json_str(candidate_rule)
+
     # Route: normalized JSON takes precedence
     if existing_rules is not None and candidate_rule is not None:
         try:
@@ -431,7 +438,7 @@ def analyze_firewall_rule_overlap(
 )
 def parse_policy(
     vendor: str,
-    ruleset_payload: str,
+    ruleset_payload: Union[str, list, dict] = "",
     os_version: Optional[str] = None,
     context_objects: Union[str, dict, None] = None,
 ) -> str:
@@ -470,7 +477,8 @@ def parse_policy(
         }
     """
     start_time = time.monotonic()
-    context_objects = _normalize_context_objects(context_objects)
+    ruleset_payload = _coerce_to_json_str(ruleset_payload) or ""
+    context_objects = _coerce_to_json_str(context_objects)
 
     from fwrule_mcp.utils.validation import ValidationError, validate_vendor, validate_payload_size, validate_context_objects
     from fwrule_mcp.utils.limits import MAX_RULESET_PAYLOAD_BYTES
