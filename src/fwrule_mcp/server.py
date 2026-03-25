@@ -50,6 +50,38 @@ def _coerce_json_or_empty(v):
     return v
 
 
+def _coerce_to_list(v):
+    """Pre-validator: JSON string → list, passthrough if already list."""
+    if v is None:
+        return v
+    if isinstance(v, list):
+        return v
+    if isinstance(v, str):
+        try:
+            parsed = json.loads(v)
+            if isinstance(parsed, list):
+                return parsed
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return v
+
+
+def _coerce_to_dict(v):
+    """Pre-validator: JSON string → dict, passthrough if already dict."""
+    if v is None:
+        return v
+    if isinstance(v, dict):
+        return v
+    if isinstance(v, str):
+        try:
+            parsed = json.loads(v)
+            if isinstance(parsed, dict):
+                return parsed
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return v
+
+
 # ---------------------------------------------------------------------------
 # FastMCP application instance
 # ---------------------------------------------------------------------------
@@ -251,11 +283,15 @@ def _run_vendor_pipeline(
 
 
 def _run_normalized_pipeline(
-    existing_rules_json: str,
-    candidate_rule_json: str,
+    existing_rules_input,
+    candidate_rule_input,
     candidate_position: Optional[int],
 ) -> dict:
-    """Path B: normalized JSON input pipeline."""
+    """Path B: normalized JSON input pipeline.
+
+    Accepts both JSON strings and native Python objects (list/dict) for
+    existing_rules_input and candidate_rule_input.
+    """
     start_time = time.monotonic()
 
     from pydantic import ValidationError as PydanticValidationError
@@ -265,16 +301,19 @@ def _run_normalized_pipeline(
         rule_input_to_candidate,
     )
 
-    # Parse and validate existing rules
-    try:
-        existing_raw = json.loads(existing_rules_json)
-    except (json.JSONDecodeError, TypeError) as exc:
-        return _build_error_response(
-            "invalid_input",
-            f"existing_rules is not valid JSON: {exc}",
-            field="existing_rules",
-            duration_ms=(time.monotonic() - start_time) * 1000,
-        )
+    # Parse existing rules — accept str or list
+    if isinstance(existing_rules_input, str):
+        try:
+            existing_raw = json.loads(existing_rules_input)
+        except (json.JSONDecodeError, TypeError) as exc:
+            return _build_error_response(
+                "invalid_input",
+                f"existing_rules is not valid JSON: {exc}",
+                field="existing_rules",
+                duration_ms=(time.monotonic() - start_time) * 1000,
+            )
+    else:
+        existing_raw = existing_rules_input
 
     if not isinstance(existing_raw, list):
         return _build_error_response(
@@ -294,16 +333,19 @@ def _run_normalized_pipeline(
             duration_ms=(time.monotonic() - start_time) * 1000,
         )
 
-    # Parse and validate candidate rule
-    try:
-        candidate_raw = json.loads(candidate_rule_json)
-    except (json.JSONDecodeError, TypeError) as exc:
-        return _build_error_response(
-            "invalid_input",
-            f"candidate_rule is not valid JSON: {exc}",
-            field="candidate_rule",
-            duration_ms=(time.monotonic() - start_time) * 1000,
-        )
+    # Parse candidate rule — accept str or dict
+    if isinstance(candidate_rule_input, str):
+        try:
+            candidate_raw = json.loads(candidate_rule_input)
+        except (json.JSONDecodeError, TypeError) as exc:
+            return _build_error_response(
+                "invalid_input",
+                f"candidate_rule is not valid JSON: {exc}",
+                field="candidate_rule",
+                duration_ms=(time.monotonic() - start_time) * 1000,
+            )
+    else:
+        candidate_raw = candidate_rule_input
 
     try:
         candidate_input = RuleInput(**candidate_raw)
@@ -363,11 +405,11 @@ def analyze_firewall_rule_overlap(
     candidate_position: Annotated[Optional[int], Field(
         description="Optional 1-based intended insertion position of the candidate rule.",
     )] = None,
-    existing_rules: Annotated[Optional[str], BeforeValidator(_coerce_json), Field(
-        description='JSON string — array of normalized rule objects. Each object: {"id": str, "position": int, "action": "permit"|"deny", "source_addresses": ["CIDR"|"any"], "destination_addresses": ["CIDR"|"any"], "services": [{"protocol": "tcp"|"udp"|"icmp", "ports": "number"}], "source_zones": ["any"], "destination_zones": ["any"], "applications": ["any"]}. Required for Mode 2 (normalized JSON). Use parse_policy output.',
+    existing_rules: Annotated[Optional[list], BeforeValidator(_coerce_to_list), Field(
+        description='Array of normalized rule objects from parse_policy output. Each object: {"id": "rule_1", "position": 1, "action": "permit"|"deny", "source_addresses": ["10.0.0.0/8"], "destination_addresses": ["any"], "services": [{"protocol": "tcp", "ports": "443"}], "source_zones": ["any"], "destination_zones": ["any"], "applications": ["any"]}. Required for Mode 2.',
     )] = None,
-    candidate_rule: Annotated[Optional[str], BeforeValidator(_coerce_json), Field(
-        description='JSON string — single normalized rule object (same schema as existing_rules elements). Required for Mode 2.',
+    candidate_rule: Annotated[Optional[dict], BeforeValidator(_coerce_to_dict), Field(
+        description='Single normalized rule object (same schema as existing_rules elements). Example: {"id": "candidate", "position": 1, "action": "permit", "source_addresses": ["10.20.35.76/32"], "destination_addresses": ["172.16.20.0/24"], "services": [{"protocol": "tcp", "ports": "6379"}]}. Required for Mode 2.',
     )] = None,
 ) -> dict:
     """Analyze firewall rule overlap between a candidate rule and an existing policy.
