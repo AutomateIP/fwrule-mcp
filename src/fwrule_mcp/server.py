@@ -540,6 +540,125 @@ def parse_policy(
 
 
 @mcp.tool(
+    name="batch_analyze_overlap",
+    description=(
+        "Analyze multiple candidate rules against the same existing ruleset in a single call. "
+        "More efficient than calling analyze_firewall_rule_overlap multiple times — "
+        "existing_rules is parsed once and reused for each candidate. "
+        "Use parse_policy first to get normalized rules, then pass all candidates at once."
+    ),
+)
+def batch_analyze_overlap(
+    existing_rules: Annotated[Optional[list], BeforeValidator(_coerce_to_list), Field(
+        description='Array of normalized rule objects from parse_policy output. Parsed once and reused for all candidates.',
+    )] = None,
+    candidate_rules: Annotated[Optional[list], BeforeValidator(_coerce_to_list), Field(
+        description='Array of candidate rule objects to analyze. Each object: {"id": "candidate-1", "position": 1, "action": "permit"|"deny", "source_addresses": ["CIDR"], "destination_addresses": ["CIDR"], "services": [{"protocol": "tcp", "ports": "443"}], "source_zones": ["any"], "destination_zones": ["any"], "applications": ["any"]}.',
+    )] = None,
+) -> dict:
+    """Analyze multiple candidates against the same existing ruleset in one call.
+
+    Returns {"success": true, "results": [{"candidate_id": str, ...analysis result...}, ...]}.
+    """
+    start_time = time.monotonic()
+
+    if not existing_rules or not candidate_rules:
+        return _build_error_response(
+            "missing_parameters",
+            "Both existing_rules and candidate_rules are required.",
+            duration_ms=(time.monotonic() - start_time) * 1000,
+        )
+
+    from pydantic import ValidationError as PydanticValidationError
+    from fwrule_mcp.normalization.schema import (
+        RuleInput,
+        rule_input_to_normalized,
+        rule_input_to_candidate,
+    )
+
+    # Parse existing rules — accept str or list
+    if isinstance(existing_rules, str):
+        try:
+            existing_raw = json.loads(existing_rules)
+        except (json.JSONDecodeError, TypeError) as exc:
+            return _build_error_response(
+                "invalid_input", f"existing_rules is not valid JSON: {exc}",
+                field="existing_rules",
+                duration_ms=(time.monotonic() - start_time) * 1000,
+            )
+    else:
+        existing_raw = existing_rules
+
+    if not isinstance(existing_raw, list):
+        return _build_error_response(
+            "invalid_input", "existing_rules must be a JSON array of rule objects.",
+            field="existing_rules",
+            duration_ms=(time.monotonic() - start_time) * 1000,
+        )
+
+    try:
+        existing_inputs = [RuleInput(**r) for r in existing_raw]
+        normalized_rules = [rule_input_to_normalized(r) for r in existing_inputs]
+    except (PydanticValidationError, TypeError, Exception) as exc:
+        return _build_error_response(
+            "invalid_input", f"existing_rules validation failed: {exc}",
+            field="existing_rules",
+            duration_ms=(time.monotonic() - start_time) * 1000,
+        )
+
+    # Parse candidate_rules — accept str or list
+    if isinstance(candidate_rules, str):
+        try:
+            candidates_raw = json.loads(candidate_rules)
+        except (json.JSONDecodeError, TypeError) as exc:
+            return _build_error_response(
+                "invalid_input", f"candidate_rules is not valid JSON: {exc}",
+                field="candidate_rules",
+                duration_ms=(time.monotonic() - start_time) * 1000,
+            )
+    else:
+        candidates_raw = candidate_rules
+
+    if not isinstance(candidates_raw, list):
+        return _build_error_response(
+            "invalid_input", "candidate_rules must be a JSON array of rule objects.",
+            field="candidate_rules",
+            duration_ms=(time.monotonic() - start_time) * 1000,
+        )
+
+    # Run analysis for each candidate, reusing parsed existing_rules
+    results = []
+    for i, cand_raw in enumerate(candidates_raw):
+        cand_id = cand_raw.get("id", f"candidate_{i+1}") if isinstance(cand_raw, dict) else f"candidate_{i+1}"
+        try:
+            if isinstance(cand_raw, str):
+                cand_raw = json.loads(cand_raw)
+            candidate_input = RuleInput(**cand_raw)
+            normalized_candidate = rule_input_to_candidate(candidate_input, None)
+            cand_start = time.monotonic()
+            result_dict = _run_analysis(normalized_rules, normalized_candidate, None, "normalized", cand_start)
+            result_dict["candidate_id"] = cand_id
+            results.append(result_dict)
+        except Exception as exc:
+            results.append({
+                "success": False,
+                "candidate_id": cand_id,
+                "error": {"code": "analysis_error", "message": str(exc)},
+            })
+
+    duration_ms = (time.monotonic() - start_time) * 1000
+    return {
+        "success": True,
+        "results": results,
+        "metadata": {
+            "existing_rule_count": len(normalized_rules),
+            "candidates_analyzed": len(results),
+            "total_duration_ms": round(duration_ms, 2),
+        },
+    }
+
+
+@mcp.tool(
     name="list_supported_vendors",
     description=(
         "List all supported firewall vendors and their configuration format requirements. "
