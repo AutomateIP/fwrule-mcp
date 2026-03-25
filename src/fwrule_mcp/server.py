@@ -20,11 +20,26 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Optional
+from typing import Optional, Union
 
 from fastmcp import FastMCP
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_context_objects(value: Union[str, dict, None]) -> Optional[str]:
+    """Coerce context_objects to a JSON string.
+
+    Some MCP clients (e.g. iagctl) send an empty dict ``{}`` instead of
+    omitting the parameter.  This normalizes dict → JSON string and
+    treats empty dicts as None so downstream validation works correctly.
+    """
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return json.dumps(value) if value else None
+    return value
+
 
 # ---------------------------------------------------------------------------
 # FastMCP application instance
@@ -129,11 +144,12 @@ def _run_vendor_pipeline(
     ruleset_payload: str,
     candidate_rule_payload: str,
     os_version: Optional[str],
-    context_objects: Optional[str],
+    context_objects: Union[str, dict, None],
     candidate_position: Optional[int],
 ) -> dict:
     """Path A: vendor parser pipeline."""
     start_time = time.monotonic()
+    context_objects = _normalize_context_objects(context_objects)
 
     from fwrule_mcp.utils.validation import (
         ValidationError,
@@ -325,7 +341,7 @@ def analyze_firewall_rule_overlap(
     ruleset_payload: Optional[str] = None,
     candidate_rule_payload: Optional[str] = None,
     os_version: Optional[str] = None,
-    context_objects: Optional[str] = None,
+    context_objects: Union[str, dict, None] = None,
     candidate_position: Optional[int] = None,
     existing_rules: Optional[str] = None,
     candidate_rule: Optional[str] = None,
@@ -417,7 +433,7 @@ def parse_policy(
     vendor: str,
     ruleset_payload: str,
     os_version: Optional[str] = None,
-    context_objects: Optional[str] = None,
+    context_objects: Union[str, dict, None] = None,
 ) -> str:
     """
     Parse a vendor-native firewall configuration and return normalized rules.
@@ -454,6 +470,7 @@ def parse_policy(
         }
     """
     start_time = time.monotonic()
+    context_objects = _normalize_context_objects(context_objects)
 
     from fwrule_mcp.utils.validation import ValidationError, validate_vendor, validate_payload_size, validate_context_objects
     from fwrule_mcp.utils.limits import MAX_RULESET_PAYLOAD_BYTES
