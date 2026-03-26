@@ -15,6 +15,7 @@ An MCP server that analyzes firewall rule overlap, duplication, shadowing, and c
 | Juniper SRX | `display set` format | 19.x+ |
 | Juniper Junos (MX/PTX/QFX) | `display set` format | 18.x+ |
 | Nokia SR OS | MD-CLI info/flat format | 20.x+ |
+| Fortinet FortiOS / FortiGate | `show full-configuration` text | 6.x - 7.x |
 
 ## Quick Start
 
@@ -36,7 +37,7 @@ uv run fwrule-mcp
 Analyze whether a candidate firewall rule overlaps with an existing ruleset. Supports two input modes.
 
 **Mode 1 — Vendor-native configs** (built-in parsers):
-- `vendor` — Vendor identifier (`panos`, `asa`, `ftd`, `ios`, `iosxr`, `checkpoint`, `juniper`, `junos`, `sros`)
+- `vendor` — Vendor identifier (`panos`, `asa`, `ftd`, `ios`, `iosxr`, `checkpoint`, `juniper`, `junos`, `sros`, `fortios`)
 - `ruleset_payload` — Complete firewall config in vendor-native format
 - `candidate_rule_payload` — Single candidate rule in vendor-native format
 - `os_version` — Optional OS version string
@@ -83,6 +84,15 @@ Parse a vendor-native firewall config and return normalized JSON rules. Use this
 
 Returns the same normalized schema accepted by `analyze_firewall_rule_overlap`.
 
+### `batch_analyze_overlap`
+
+Analyze multiple candidate rules against the same existing ruleset in a single call. More efficient than calling `analyze_firewall_rule_overlap` multiple times — existing rules are parsed once and reused for each candidate.
+
+- `existing_rules` — Array of normalized rule objects (from `parse_policy` output)
+- `candidate_rules` — Array of candidate rule objects to analyze
+
+Returns `{"success": true, "results": [{"candidate_id": "...", ...analysis result...}, ...]}`.
+
 ### `list_supported_vendors`
 
 List all supported firewall vendors with format requirements.
@@ -115,7 +125,7 @@ MCP Client Request
        │         │
        │         v
        │    Vendor Parser (plugin registry)
-       │    [PAN-OS │ ASA │ FTD │ IOS │ IOS-XR │ CP │ SRX │ Junos │ SR OS]
+       │    [PAN-OS │ ASA │ FTD │ IOS │ IOS-XR │ CP │ SRX │ Junos │ SR OS │ FortiOS]
        │         │
        │         v
        │    Normalization Layer (object resolution, address expansion)

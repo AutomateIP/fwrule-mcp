@@ -1,10 +1,11 @@
 """
 MCP Server entry point — FWRule MCP — Firewall Rule Analyzer.
 
-Three tools:
+Four tools:
   1. analyze_firewall_rule_overlap — Hybrid: accepts vendor-native OR normalized JSON
   2. parse_policy — Parse vendor-native config and return normalized JSON schema
-  3. list_supported_vendors — List supported vendors and formats
+  3. batch_analyze_overlap — Analyze multiple candidates against the same ruleset
+  4. list_supported_vendors — List supported vendors and formats
 
 Two analysis paths (selected automatically by which parameters are provided):
   Path A (vendor parsers):  vendor + ruleset_payload + candidate_rule_payload
@@ -91,7 +92,7 @@ mcp = FastMCP(
     instructions=(
         "Analyzes whether a candidate firewall rule overlaps with, duplicates, "
         "shadows, or conflicts with an existing policy ruleset. "
-        "Accepts vendor-native configs (9 vendors) OR pre-normalized JSON rules. "
+        "Accepts vendor-native configs (10 vendors) OR pre-normalized JSON rules. "
         "Use parse_policy to inspect what the built-in parsers extract before analysis."
     ),
 )
@@ -388,7 +389,7 @@ def _run_normalized_pipeline(
 )
 def analyze_firewall_rule_overlap(
     vendor: Annotated[Optional[str], BeforeValidator(_coerce_json), Field(
-        description='Vendor identifier. One of: "panos", "asa", "ftd", "ios", "iosxr", "checkpoint", "juniper", "junos", "sros". Required for Mode 1 (vendor-native).',
+        description='Vendor identifier. One of: "panos", "asa", "ftd", "ios", "iosxr", "checkpoint", "juniper", "junos", "sros", "fortios". Required for Mode 1 (vendor-native).',
     )] = None,
     ruleset_payload: Annotated[Optional[str], BeforeValidator(_coerce_json), Field(
         description="Complete firewall config in vendor-native text format (e.g. full 'show access-lists' output for IOS). Required for Mode 1.",
@@ -460,7 +461,7 @@ def analyze_firewall_rule_overlap(
 )
 def parse_policy(
     vendor: Annotated[str, Field(
-        description='Vendor identifier. One of: "panos", "asa", "ftd", "ios", "iosxr", "checkpoint", "juniper", "junos", "sros".',
+        description='Vendor identifier. One of: "panos", "asa", "ftd", "ios", "iosxr", "checkpoint", "juniper", "junos", "sros", "fortios".',
     )],
     ruleset_payload: Annotated[str, BeforeValidator(_coerce_json_or_empty), Field(
         description="Complete firewall config in vendor-native text format. For IOS: paste the full 'show access-lists <name>' output. For PAN-OS: paste the full XML config tree.",
