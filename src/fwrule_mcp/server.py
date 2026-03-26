@@ -679,6 +679,7 @@ def list_supported_vendors() -> str:
             {"id": "juniper", "aliases": ["srx"], "format": "set-commands"},
             {"id": "junos", "aliases": ["mx", "ptx", "qfx"], "format": "set-commands"},
             {"id": "sros", "aliases": ["nokia", "sr-os", "md-cli"], "format": "md-cli"},
+            {"id": "fortios", "aliases": ["fortigate", "forti", "fortinet"], "format": "text"},
         ],
         "normalized_input": "Use existing_rules + candidate_rule params to bypass parsers.",
     })
