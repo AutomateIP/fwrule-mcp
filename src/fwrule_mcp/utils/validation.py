@@ -48,6 +48,7 @@ SUPPORTED_VENDORS = frozenset({
     "iosxr",
     "junos",
     "sros",
+    "fortios",
 })
 
 # Common aliases that LLMs and users might use instead of the canonical ID.
@@ -102,6 +103,15 @@ VENDOR_ALIASES: dict[str, str] = {
     "nokia-sros": "sros",
     "md-cli": "sros",
     "mdcli": "sros",
+    # --- Fortinet FortiOS ---
+    "fortigate": "fortios",
+    "fortinet": "fortios",
+    "forti": "fortios",
+    "fortigate-os": "fortios",
+    "forti-os": "fortios",
+    "fgt": "fortios",
+    "fortimanager": "fortios",
+    "fmg": "fortios",
 }
 
 
